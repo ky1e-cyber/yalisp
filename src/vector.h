@@ -78,13 +78,13 @@ vector_ptr_t vector_grow_sized(vector_ptr_t vec, size_t elem_sz);
 #define vector_push_back(T, vec, elem) /* -> vector_ptr_t */              \
   ({                                                                      \
     m_assert_istype(T);                                                   \
-    const T elem__ = elem;                                                \
+    T elem__ = elem;                                                      \
     vector_ptr_t vec__ = vec;                                             \
     vector_ptr_t grown__ = (vector_size(vec__) == vector_capacity(vec__)) \
                                ? vector_grow_sized(vec__, sizeof(T))      \
                                : vec__;                                   \
     if (grown__ != NULL) {                                                \
-      ((T*)vector_baseptr(grown__))[(grown__->size)++] = elem__;          \
+      ((T*)vector_baseptr(grown__))[(grown__->size)++] = (T)elem__;       \
     }                                                                     \
     grown__;                                                              \
   })
@@ -109,23 +109,23 @@ m_macro_like void vector_remove_back(vector_ptr_t vec) {
     (T*)vector_baseptr(vec__);           \
   })
 
-#define vector_end(T, vec) /* -> const T* */           \
-  ({                                                   \
-    m_assert_istype(T);                                \
-    vector_ptr_t vec__ = vec;                          \
-    const T* data__ = (const T*)vector_baseptr(vec__); \
-    (const T*)(data__ + vector_size(vec__));           \
+#define vector_end(T, vec) /* -> T* */                \
+  ({                                                  \
+    m_assert_istype(T);                               \
+    vector_ptr_t vec__ = vec;                         \
+    ((T*)vector_baseptr(vec__)) + vector_size(vec__); \
   })
 
-#define vector_foreach(T, vec, op) /* -> void */                \
-  {                                                             \
-    m_assert_istype(T);                                         \
-    vector_ptr_t vec__ = vec;                                   \
-    void (*const op__)(T*) = op;                                \
-    const T* end__ = (const T*)(data__ + vector_size(vec__));   \
-    for (T* it = (T*)vector_baseptr(vec__); it < end__; it++) { \
-      op__(it);                                                 \
-    }                                                           \
+#define vector_foreach(T, vec, op) /* -> void */ \
+  {                                              \
+    m_assert_istype(T);                          \
+    vector_ptr_t vec__ = vec;                    \
+    void (*op__)(T*) = op;                       \
+    T* begin__ = (T*)vector_baseptr(vec__);      \
+    T* end__ = begin__ + vector_size(vec__);     \
+    for (T* it = begin__; it < end__; it++) {    \
+      op__(it);                                  \
+    }                                            \
   }
 
 m_macro_like void vector_clear(vector_ptr_t vec) {

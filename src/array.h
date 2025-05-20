@@ -19,7 +19,7 @@ m_macro_like size_t array_bytesize_sized(size_t elem_sz, size_t cnt) {
   return sizeof(array_header_t) + elem_sz * cnt;
 }
 
-#define arary_bytesize(T, cnt) /* -> size_t */ \
+#define array_bytesize(T, cnt) /* -> size_t */ \
   ({                                           \
     m_assert_istype(T);                        \
     size_t cnt__ = cnt;                        \
@@ -54,33 +54,33 @@ m_macro_like void* array_baseptr(array_ptr_t arr) {
     (T*)array_baseptr(arr__);           \
   })
 
-#define array_end(T, arr) /* -> const T* */           \
-  ({                                                  \
-    m_assert_istype(T);                               \
-    array_ptr_t arr__ = arr;                          \
-    const T* data__ = (const T*)array_baseptr(arr__); \
-    (const T*)(data__ + array_size(arr__));           \
+#define array_end(T, arr) /* -> T* */     \
+  ({                                      \
+    m_assert_istype(T);                   \
+    array_ptr_t arr__ = arr;              \
+    T* data__ = (T*)array_baseptr(arr__); \
+    data__ + array_size(arr__);           \
   })
 
-#define array_fill_from(T, arr, buf, buf_sz) /* -> void */   \
-  {                                                          \
-    m_assert_istype(T);                                      \
-    size_t buf_sz__ = buf_sz;                                \
-    const T* const buf__ = buf;                              \
-    array_ptr_t arr__ = arr;                                 \
-    assert(arr__ != NULL);                                   \
-    assert(array_size(arr__) >= buf_sz__);                   \
-    const T* end__ = (const T*)(data__ + array_size(arr__)); \
-    for (T* it = (T*)array_baseptr(arr__); it < end__; it++) \
-      it = buf__[i];                                         \
+#define array_fill_from(T, arr, buf, buf_sz) /* -> void */ \
+  {                                                        \
+    m_assert_istype(T);                                    \
+    size_t buf_sz__ = buf_sz;                              \
+    T* buf__ = buf;                                        \
+    array_ptr_t arr__ = arr;                               \
+    assert(arr__ != NULL);                                 \
+    assert(array_size(arr__) >= buf_sz__);                 \
+    for (size_t i = 0; i < array_size(arr__); i++)         \
+      ((T*)array_baseptr(arr__))[i] = buf__[i];            \
   }
 
 #define array_foreach(T, arr, op) /* -> void */                \
   {                                                            \
     m_assert_istype(T);                                        \
-    arr_ptr_t arr__ = arr;                                     \
-    void (*const op__)(T*) = op;                               \
-    const T* end__ = (const T*)(data__ + array_size(arr__));   \
+    array_ptr_t arr__ = arr;                                   \
+    void (*op__)(T*) = op;                                     \
+    T* begin__ = ((T*)array_baseptr(arr__));                   \
+    T* end__ = begin__ + array_size(arr__);                    \
     for (T* it = (T*)array_baseptr(arr__); it < end__; it++) { \
       op__(it);                                                \
     }                                                          \
