@@ -37,32 +37,19 @@ typedef struct parse_tree_t_ {
   const char* err_msg;
 } parse_tree_t;
 
-void fdump_tokens(FILE* stream);
+typedef struct {
+  token_t current_token;
+  bool eos;
+} parser_state_t;
 
-parse_tree_t* pt_make_toplevel_node(
-    arena_ptr_t arena,
-    loc_t loc,
-    array_ptr_t /* [parse_tree_t*] */ toplevel_list);
+void fdump_tokens(FILE* stream,
+                  const char* const src_path,
+                  arena_ptr_t str_arena);
 
-parse_tree_t* pt_make_list_node(arena_ptr_t arena,
-                                loc_t loc,
-                                array_ptr_t /* [parse_tree_t*] */ list);
-
-parse_tree_t* pt_make_quoted_node(arena_ptr_t arena,
-                                  loc_t loc,
-                                  parse_tree_t* subtree);
-
-parse_tree_t* pt_make_atom_node(arena_ptr_t arena,
-                                loc_t loc,
-                                token_t atom_token);
-
-parse_tree_t* pt_make_literal_node(arena_ptr_t arena,
-                                   loc_t loc,
-                                   token_t literal_token);
-
-parse_tree_t* pt_make_error_node(arena_ptr_t arena,
-                                 loc_t loc,
-                                 const char* err_msg);
+void fdump_parse_tree(FILE* stream,
+                      const char* const src_path,
+                      arena_ptr_t str_arena,
+                      arena_ptr_t pt_arena);
 
 parse_tree_t* parse(const char* const path,
                     arena_ptr_t str_arena,
