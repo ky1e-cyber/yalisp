@@ -17,7 +17,6 @@ typedef enum {
   SPEC_MINUS,
   SPEC_STAR,
   SPEC_SLASH,
-  SPEC_TILDE,
   SPEC_IF,
   SPEC_EQ,
   SPEC_NEQ,
@@ -29,6 +28,8 @@ typedef enum {
   SPEC_AND,
   SPEC_OR,
   SPEC_LAMBDA,
+  SPEC_DO,
+  SPEC_VECTOR,
   SPEC_COUNT__
 } special_atom_t;
 
@@ -43,7 +44,6 @@ typedef enum {
   TK_QUOTE,
   TK_BOOL_LITERAL,
   TK_INT_LITERAL,
-  TK_FLOAT_LITERAL,
   TK_STR_LITERAL,
   TK_ATOM,
   TK_SPECIAL_ATOM,
@@ -57,7 +57,6 @@ typedef struct {
   union {
     bool as_bool;
     int64_t as_i64;
-    double as_f64;
     special_atom_t as_special_atom;
     char* as_cstr;
   } value;

@@ -128,8 +128,27 @@ m_macro_like void vector_remove_back(vector_ptr_t vec) {
     }                                            \
   }
 
+vector_ptr_t vector_copy_sized(size_t elem_sz, vector_ptr_t src);
+
+#define vector_copy(T, src) /* -> vector_ptr_t */ \
+  ({                                              \
+    m_assert_istype(T);                           \
+    vector_ptr_t src__ = src;                     \
+    vector_copy_sized(sizeof(T), src__);          \
+  })
+
 m_macro_like void vector_clear(vector_ptr_t vec) {
   vec->size = 0;
 }
+
+void vector_copy_data_sized(size_t elem_sz, vector_ptr_t vec, void* dest);
+
+#define vector_copy_data(T, vec, dest) /* -> void */  \
+  {                                                   \
+    m_assert_istype(T);                               \
+    vector_ptr_t vec__ = vec;                         \
+    void* dest__ = dest;                              \
+    vector_copy_data_sized(sizeof(T), vec__, dest__); \
+  }
 
 #endif

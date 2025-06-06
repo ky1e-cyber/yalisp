@@ -42,3 +42,35 @@ vector_ptr_t vector_grow_sized(vector_ptr_t vec, size_t elem_sz) {
 
   return new_mem;
 }
+
+vector_ptr_t vector_copy_sized(size_t elem_sz, vector_ptr_t src) {
+  size_t cap = src->capacity;
+  size_t sz = src->size;
+
+  alloc_t alloc = src->allocator;
+
+  vector_ptr_t new = (vector_ptr_t)alloc.acquire(elem_sz * cap);
+  if (new == NULL) {
+    src->fail_callback();
+    return NULL;
+  }
+
+  vector_header_t new_hd = {.allocator = alloc,
+                            .capacity = cap,
+                            .size = sz,
+                            .fail_callback = src->fail_callback};
+  memcpy(new, &new_hd, sizeof(vector_header_t));
+
+  size_t bytesz = sz * elem_sz;
+
+  for (size_t i = 0; i < bytesz; i++) {
+    ((char*)vector_baseptr(new))[i] = ((char*)vector_baseptr(src))[i];
+  }
+
+  return new;
+}
+
+void vector_copy_data_sized(size_t elem_sz, vector_ptr_t vec, void* dest) {
+  size_t bytesize = elem_sz * vec->size;
+  memcpy(dest, vector_baseptr(vec), bytesize);
+}

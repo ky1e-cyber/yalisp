@@ -1,15 +1,16 @@
-CFLAGS=-std=gnu11 -fwrapv -fno-strict-aliasing -Wall -Werror -fsanitize=undefined -fsanitize=address
-CFLAGS_DEBUG=-g
-CFLAGS_RELEASE=-O2 -finline-functions-called-once 
+CFLAGS=-std=gnu11 -fwrapv -Wall
+CFLAGS_DEBUG=-g -fno-strict-aliasing -fsanitize=undefined -fsanitize=address
+CFLAGS_RELEASE=-O2 -finline-functions-called-once
 
-SRCS=$(wildcard src/*.c)
-HEADERS=$(wildcard src/*.h)
-OBJS=$(SRCS:.c=.o)
+COMPILER_SRCS=$(wildcard src/compiler/*.c)
+COMPILER_HEADERS=$(wildcard src/compiler/*.h)
 
 TEST_SRCS=$(wildcard test/*.c)
-TESTS=$(TEST_SRCS:.c=.exe)
 
-all: debug
+all: compiler_debug
 
-debug: $(SRCS) $(HEADERS)
-	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) $(SRCS) -o yalispc
+compiler_debug: $(COMPILER_SRC) $(COMPILER_HEADERS)
+	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) $(COMPILER_SRCS) -o yalispc
+
+clean:
+	rm -f yalispc
