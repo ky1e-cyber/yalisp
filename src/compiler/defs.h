@@ -15,4 +15,12 @@
 #define VECTOR_GROW_FACTOR 2
 #endif
 
+#if !defined(PARSER_TREE_ARENA_SIZE)
+#define PARSER_TREE_ARENA_SIZE (1 << 20)
+#endif
+
+#if !defined(PARSER_ENV_ARENA_SIZE)
+#define PARSER_ENV_ARENA_SIZE (1 << 20)
+#endif
+
 #endif

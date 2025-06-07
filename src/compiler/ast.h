@@ -6,7 +6,7 @@
 #include "array.h"
 #include "token.h"
 
-typedef int64_t name_id_t;
+typedef int name_id_t;
 
 typedef struct ast_t__ ast_t;
 

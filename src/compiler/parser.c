@@ -1,3 +1,4 @@
+#include "defs.h"
 #pragma clang diagnostic ignored "-Wformat-security"
 
 #include <assert.h>
@@ -16,13 +17,9 @@
 #include "macros.h"
 #include "parser.h"
 #include "shared.h"
+#include "table.h"
 #include "token.h"
 #include "vector.h"
-
-typedef struct {
-  const char* name_str;
-  name_id_t name_id;
-} assoc_pair_t;
 
 typedef enum { HASH_TRUE = 0, HASH_FALSE, HASH_COUNT__ } hash_literal_t;
 
@@ -514,17 +511,6 @@ void fdump_tokens(FILE* stream,
   fprintf(stream, "\n");
 }
 
-static name_id_t env_lookup(vector_ptr_t env, const char* name_str) {
-  for (int64_t i = vector_size(env) - 1; i >= 0; i--) {
-    assoc_pair_t p = vector_data(assoc_pair_t, env)[i];
-    const char* s = p.name_str;
-    if (strcmp(s, name_str) == 0)
-      return p.name_id;
-  }
-
-  return -1;
-}
-
 static parser_state_t g_parser = {
     .current_token = {.kind = TK_EOS, .loc = {.line_no = 0, .line_pos = 0}},
     .eos = true};
@@ -571,11 +557,11 @@ static void parser_init(const char* const src_path, arena_ptr_t str_arena) {
 
 static ast_t* parse_expr(arena_ptr_t ast_arena,
                          arena_ptr_t str_arena,
-                         vector_ptr_t /* [assoc_pair_t] */ env);
+                         table_t env);
 
 static ast_t* parse_binop(arena_ptr_t ast_arena,
                           arena_ptr_t str_arena,
-                          vector_ptr_t env) {
+                          table_t env) {
   token_t op_tk = parser_next_token_consume();
   loc_t loc = op_tk.loc;
 
@@ -603,7 +589,7 @@ static ast_t* parse_binop(arena_ptr_t ast_arena,
 
 static ast_t* parse_if(arena_ptr_t ast_arena,
                        arena_ptr_t str_arena,
-                       vector_ptr_t env) {
+                       table_t env) {
   token_t if_tk = parser_next_token_consume();
   loc_t loc = if_tk.loc;
 
@@ -623,7 +609,7 @@ static ast_t* parse_if(arena_ptr_t ast_arena,
 
 static ast_t* parse_let(arena_ptr_t ast_arena,
                         arena_ptr_t str_arena,
-                        vector_ptr_t env) {
+                        table_t env) {
   token_t let = parser_next_token_consume();
   assert(let.kind == TK_SPECIAL_ATOM && let.value.as_special_atom == SPEC_LET);
 
@@ -640,13 +626,8 @@ static ast_t* parse_let(arena_ptr_t ast_arena,
   if (name_atom.kind != TK_ATOM)
     return ast_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
-  vector_ptr_t local_env m_cleanup(vector_cleanup) =
-      vector_copy(assoc_pair_t, env);
-
   name_id_t id = g_names_cnt++;
-
-  assoc_pair_t new_var = {.name_id = id, .name_str = name_atom.value.as_cstr};
-  local_env = vector_push_back(assoc_pair_t, local_env, new_var);
+  table_t local_env = table_add(env, name_atom.value.as_cstr, id);
 
   ast_t* bind_value = parse_expr(ast_arena, str_arena, local_env);
 
@@ -666,7 +647,7 @@ static ast_t* parse_let(arena_ptr_t ast_arena,
 }
 
 static vector_ptr_t collect_free(const ast_t* expr,
-                                 const vector_ptr_t env,
+                                 table_t env,
                                  vector_ptr_t acc) {
   switch (expr->kind) {
     case AST_BOOL_LITERAL:
@@ -674,11 +655,20 @@ static vector_ptr_t collect_free(const ast_t* expr,
     case AST_STR_LITERAL:
     case AST_ERROR:
       return acc;
-    case AST_LET:
+    case AST_LET:;
+      ast_let_form_t let = expr->value.as_let_form;
+      env = table_add(env, NULL, let.bind.name_id);
       acc = collect_free(expr->value.as_let_form.bind.value_subtree, env, acc);
       return collect_free(expr->value.as_let_form.expr_subtree, env, acc);
-    case AST_LAMBDA:
-      return collect_free(expr->value.as_lambda.body_subtree, env, acc);
+    case AST_LAMBDA:;
+      array_ptr_t captured = expr->value.as_lambda.captured;
+      for (size_t i = 0; i < array_size(captured); i++) {
+        name_id_t id = array_data(name_id_t, captured)[i];
+        if (!table_contains(env, id))
+          acc = vector_push_back(name_id_t, acc, id);
+      }
+
+      return acc;
     case AST_IF:
       acc = collect_free(expr->value.as_if_form.cond_subtree, env, acc);
       acc = collect_free(expr->value.as_if_form.t_branch_subtree, env, acc);
@@ -694,15 +684,8 @@ static vector_ptr_t collect_free(const ast_t* expr,
       return acc;
     case AST_NAME:;
       name_id_t id = expr->value.as_name_id;
-
-      for (assoc_pair_t* it = vector_begin(assoc_pair_t, env);
-           it < vector_end(assoc_pair_t, env); it++) {
-        if (it->name_id == id) {
-          acc = vector_push_back(name_id_t, acc, id);
-          break;
-        }
-      }
-
+      if (!table_contains(env, id))
+        acc = vector_push_back(name_id_t, acc, id);
       return acc;
     case AST_TOPLEVEL:
       assert(false);
@@ -714,14 +697,14 @@ static vector_ptr_t collect_free(const ast_t* expr,
 
 static ast_t* parse_lambda(arena_ptr_t ast_arena,
                            arena_ptr_t str_arena,
-                           const vector_ptr_t env) {
+                           table_t env) {
   token_t lambd_tk = parser_next_token_consume();
   loc_t loc = lambd_tk.loc;
   assert(lambd_tk.kind == TK_SPECIAL_ATOM &&
          lambd_tk.value.as_special_atom == SPEC_LAMBDA);
 
-  vector_ptr_t local_env m_cleanup(vector_cleanup) =
-      vector_copy(assoc_pair_t, env);
+  // vector_ptr_t local_env m_cleanup(vector_cleanup) =
+  // vector_copy(assoc_pair_t, env);
 
   vector_ptr_t params_buf m_cleanup(vector_cleanup) =
       vector_make(name_id_t, alloc_default, error_parser_buf);
@@ -736,9 +719,7 @@ static ast_t* parse_lambda(arena_ptr_t ast_arena,
       return ast_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
     name_id_t id = g_names_cnt++;
-    assoc_pair_t ent = {.name_id = id, .name_str = nxt.value.as_cstr};
-    local_env = vector_push_back(assoc_pair_t, local_env, ent);
-
+    env = table_add(env, nxt.value.as_cstr, id);
     params_buf = vector_push_back(name_id_t, params_buf, id);
 
     nxt = parser_next_token_consume();
@@ -749,7 +730,7 @@ static ast_t* parse_lambda(arena_ptr_t ast_arena,
   array_ptr_t params = array_make_arena(name_id_t, ast_arena, buf_sz);
   vector_copy_data(name_id_t, params_buf, array_baseptr(params));
 
-  ast_t* body = parse_expr(ast_arena, str_arena, local_env);
+  ast_t* body = parse_expr(ast_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
   if (paren_c.kind != TK_ROUND_PAREN_C)
@@ -757,7 +738,14 @@ static ast_t* parse_lambda(arena_ptr_t ast_arena,
 
   vector_ptr_t frees_buf m_cleanup(vector_cleanup) =
       vector_make(name_id_t, alloc_default, error_parser_buf);
-  frees_buf = collect_free(body, local_env, frees_buf);
+
+  arena_ptr_t lambda_env_arena m_cleanup(arena_cleanup) =
+      arena_make(arena_size(env.arena), alloc_default, error_parser_env);
+  table_t lambda_env = table_make(lambda_env_arena);
+  for (size_t i = 0; i < array_size(params); i++)
+    lambda_env = table_add(lambda_env, NULL, array_data(name_id_t, params)[i]);
+
+  frees_buf = collect_free(body, lambda_env, frees_buf);
 
   array_ptr_t captured =
       array_make_arena(name_id_t, ast_arena, vector_size(frees_buf));
@@ -768,7 +756,7 @@ static ast_t* parse_lambda(arena_ptr_t ast_arena,
 
 static ast_t* parse_list(arena_ptr_t ast_arena,
                          arena_ptr_t str_arena,
-                         vector_ptr_t env) {
+                         table_t env) {
   token_t paren_o = parser_next_token_consume();
   loc_t loc = paren_o.loc;
   assert(paren_o.kind == TK_ROUND_PAREN_O);
@@ -796,10 +784,7 @@ static ast_t* parse_list(arena_ptr_t ast_arena,
     return ast_error_at(ast_arena, str_arena, loc, UNEXP_FMT);
   }
 
-  vector_ptr_t local_env m_cleanup(vector_cleanup) =
-      vector_copy(assoc_pair_t, env);
-
-  ast_t* fn = parse_expr(ast_arena, str_arena, local_env);
+  ast_t* fn = parse_expr(ast_arena, str_arena, env);
 
   vector_ptr_t buf m_cleanup(vector_cleanup) =
       vector_make(ast_t*, alloc_default, error_parser_buf);
@@ -826,7 +811,7 @@ static ast_t* parse_list(arena_ptr_t ast_arena,
 
 static ast_t* parse_expr(arena_ptr_t ast_arena,
                          arena_ptr_t str_arena,
-                         vector_ptr_t /* [assoc_pair_t] */ env) {
+                         table_t env) {
   token_t tk = parser_next_token_peek();
   loc_t loc = tk.loc;
 
@@ -837,7 +822,7 @@ static ast_t* parse_expr(arena_ptr_t ast_arena,
 
   if (tk.kind == TK_ATOM) {
     token_t atom_name = parser_next_token_consume();
-    name_id_t id = env_lookup(env, atom_name.value.as_cstr);
+    name_id_t id = table_lookup(env, atom_name.value.as_cstr);
     if (id == -1)
       return ast_error_at(ast_arena, str_arena, loc, UNDEFINED_NAME_FMT);
 
@@ -845,10 +830,7 @@ static ast_t* parse_expr(arena_ptr_t ast_arena,
   }
 
   if (tk.kind == TK_ROUND_PAREN_O) {
-    vector_ptr_t local_env m_cleanup(vector_cleanup) =
-        vector_copy(assoc_pair_t, env);
-
-    return parse_list(ast_arena, str_arena, local_env);
+    return parse_list(ast_arena, str_arena, env);
   }
 
   if (tk.kind == TK_BOOL_LITERAL) {
@@ -878,7 +860,10 @@ static ast_t* parse_expr(arena_ptr_t ast_arena,
 static ast_t* parse_toplevel(arena_ptr_t ast_arena, arena_ptr_t str_arena) {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
       vector_make(ast_t*, alloc_default, error_parser_buf);
-  vector_ptr_t env = vector_make(assoc_pair_t, alloc_default, error_parser_env);
+
+  arena_ptr_t env_arena m_cleanup(arena_cleanup) =
+      arena_make(PARSER_ENV_ARENA_SIZE, alloc_default, error_parser_env);
+  table_t env = table_make(env_arena);
 
   token_t nxt = parser_next_token_peek();
 
@@ -907,31 +892,34 @@ ast_t* parse(const char* const path,
 
 static void fpprint_ast(FILE* stream, ast_t* ast);
 
-static void fpprint_ast_seq(FILE* stream, array_ptr_t /* [ast_t*] */ lst) {
-  fprintf(stream, "[\n");
-  for (size_t i = 0; i < array_size(lst); i++) {
+static void fpprint_ast_seq(FILE* stream,
+                            array_ptr_t /* [ast_t*] */ lst,
+                            char delim) {
+  size_t seq_sz = array_size(lst);
+  for (size_t i = 0; i < seq_sz - 1; i++) {
     fpprint_ast(stream, array_data(ast_t*, lst)[i]);
-    fprintf(stream, "\n");
+    fprintf(stream, "%c", delim);
   }
-  fprintf(stream, "]");
+
+  if (seq_sz > 0)
+    fpprint_ast(stream, array_data(ast_t*, lst)[seq_sz - 1]);
 }
 
 static void fpprint_ast_if(FILE* stream, ast_if_form_t if_form) {
-  fprintf(stream, "[IF(");
+  fprintf(stream, "if ");
   fpprint_ast(stream, if_form.cond_subtree);
-  fprintf(stream, ")\nTHEN(");
+  fprintf(stream, " then ");
   fpprint_ast(stream, if_form.t_branch_subtree);
-  fprintf(stream, ")\nELSE(");
+  fprintf(stream, " else ");
   fpprint_ast(stream, if_form.f_branch_subtree);
-  fprintf(stream, ")]");
 }
 
 static void fpprint_ast_call(FILE* stream, ast_call_t call) {
-  fprintf(stream, "[CALL(");
+  fprintf(stream, "(");
   fpprint_ast(stream, call.fn_subtree);
-  fprintf(stream, ")\nARGS(");
-  fpprint_ast_seq(stream, call.args_subtrees);
-  fprintf(stream, ")]");
+  fprintf(stream, " ");
+  fpprint_ast_seq(stream, call.args_subtrees, ' ');
+  fprintf(stream, ")");
 }
 
 static const char* binop_repr(binop_t op) {
@@ -974,36 +962,40 @@ static const char* binop_repr(binop_t op) {
 }
 
 static void fpprint_ast_binop(FILE* stream, ast_binop_t binop) {
-  fprintf(stream, "[OP(%s)\n", binop_repr(binop.op));
-  fprintf(stream, "LHS(");
+  fprintf(stream, "(OP(%s) ", binop_repr(binop.op));
   fpprint_ast(stream, binop.lhs);
-  fprintf(stream, ")\nRHS(");
+  fprintf(stream, " ");
   fpprint_ast(stream, binop.rhs);
-  fprintf(stream, ")]");
+  fprintf(stream, ")");
 }
 
 static void fpprint_ast_let(FILE* stream, ast_let_form_t let) {
-  fprintf(stream, "[LET($var%lli)\nVALUE(", let.bind.name_id);
+  fprintf(stream, "let $var%d := ", let.bind.name_id);
   fpprint_ast(stream, let.bind.value_subtree);
-  fprintf(stream, ")\nEXPR(");
+  fprintf(stream, " in ");
   fpprint_ast(stream, let.expr_subtree);
-  fprintf(stream, ")]");
 }
 
 static void fpprint_ast_lambda(FILE* stream, ast_lambda_t lambda) {
-  fprintf(stream, "[LAMBDA(");
+  fprintf(stream, "[");
+  size_t captured_sz = array_size(lambda.captured);
+  for (size_t i = 0; i < captured_sz - 1; i++) {
+    fprintf(stream, "$var%d ", array_data(name_id_t, lambda.captured)[i]);
+  }
+  if (captured_sz > 0)
+    fprintf(stream, "$var%d",
+            array_data(name_id_t, lambda.captured)[captured_sz - 1]);
+  fprintf(stream, "]");
+  fprintf(stream, "\\");
   array_ptr_t params = lambda.params;
   size_t params_sz = array_size(params);
 
-  for (size_t i = 0; i < params_sz - 1; i++) {
-    fprintf(stream, "$var%lli ", array_data(name_id_t, params)[i]);
+  for (size_t i = 0; i < params_sz; i++) {
+    fprintf(stream, "$var%d ", array_data(name_id_t, params)[i]);
   }
-  if (params_sz > 0)
-    fprintf(stream, "$var%lli)", array_data(name_id_t, params)[params_sz - 1]);
 
-  fprintf(stream, "\nBODY(");
+  fprintf(stream, "-> ");
   fpprint_ast(stream, lambda.body_subtree);
-  fprintf(stream, ")]");
 }
 
 static void fpprint_ast(FILE* stream, ast_t* ast) {
@@ -1012,7 +1004,7 @@ static void fpprint_ast(FILE* stream, ast_t* ast) {
       fprintf(stream, "ERROR(%s)", ast->err_msg);
       break;
     case AST_TOPLEVEL:
-      fpprint_ast_seq(stream, ast->value.as_subtree_list);
+      fpprint_ast_seq(stream, ast->value.as_subtree_list, '\n');
       break;
     case AST_BOOL_LITERAL:
       fprintf(stream, "BOOL(%s)", ast->value.as_bool ? "true" : "false");
@@ -1024,7 +1016,7 @@ static void fpprint_ast(FILE* stream, ast_t* ast) {
       fprintf(stream, "STRING(%s)", ast->value.as_cstr);
       break;
     case AST_NAME:
-      fprintf(stream, "$var%lli", ast->value.as_name_id);
+      fprintf(stream, "$var%d", ast->value.as_name_id);
       break;
     case AST_BINOP:
       fpprint_ast_binop(stream, ast->value.as_binop);

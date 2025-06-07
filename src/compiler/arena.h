@@ -27,6 +27,10 @@ m_macro_like void* arena_baseptr(arena_ptr_t arena) {
   return (void*)(arena + 1);
 }
 
+m_macro_like size_t arena_size(arena_ptr_t arena) {
+  return arena->size;
+}
+
 m_macro_like const alloc_t* arena_get_allocator(arena_ptr_t arena) {
   return &arena->allocator;
 }
