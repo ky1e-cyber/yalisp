@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "arena.h"
-#include "ast.h"
+#include "program_tree.h"
 #include "token.h"
 
 typedef struct {
@@ -29,8 +29,8 @@ void fdump_ast(FILE* stream,
                arena_ptr_t ast_arena,
                arena_ptr_t str_arena);
 
-ast_t* parse(const char* const path,
-             arena_ptr_t ast_arena,
-             arena_ptr_t str_arena);
+program_tree_t* parse(const char* const path,
+                      arena_ptr_t pt_arena,
+                      arena_ptr_t str_arena);
 
 #endif

@@ -2,8 +2,8 @@
 #define H_PASSES
 
 #include "arena.h"
-#include "ast.h"
+#include "program_tree.h"
 
-ast_t* to_mnf(ast_t* ast, arena_ptr_t arena);
+program_tree_t* to_mnf(program_tree_t* ast, arena_ptr_t arena);
 
 #endif
