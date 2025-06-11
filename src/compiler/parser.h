@@ -20,15 +20,6 @@ typedef struct {
   bool eos;
 } parser_state_t;
 
-void fdump_tokens(FILE* stream,
-                  const char* const src_path,
-                  arena_ptr_t str_arena);
-
-void fdump_ast(FILE* stream,
-               const char* const src_path,
-               arena_ptr_t ast_arena,
-               arena_ptr_t str_arena);
-
 program_tree_t* parse(const char* const path,
                       arena_ptr_t pt_arena,
                       arena_ptr_t str_arena);

@@ -12,10 +12,10 @@
 #include "allocator.h"
 #include "arena.h"
 #include "array.h"
-#include "program_tree.h"
 #include "error.h"
 #include "macros.h"
 #include "parser.h"
+#include "program_tree.h"
 #include "shared.h"
 #include "table.h"
 #include "token.h"
@@ -440,77 +440,6 @@ static token_t lexer_next_token() {
   return invalid;
 }
 
-static void fpprint_token(FILE* stream, token_t tk) {
-  static const char* const kinds[] = {[TK_INVALID] = "INVALID",
-                                      [TK_EOS] = "EOS",
-                                      [TK_ROUND_PAREN_O] = "ROUND_PAREN_O",
-                                      [TK_ROUND_PAREN_C] = "ROUND_PAREN_C",
-                                      [TK_SQ_PAREN_O] = "SQ_PAREN_O",
-                                      [TK_SQ_PAREN_C] = "SQ_PAREN_C",
-                                      [TK_CURLY_PAREN_O] = "CURLY_PAREN_O",
-                                      [TK_CURLY_PAREN_C] = "CURLY_PAREN_C",
-                                      [TK_ATOM] = "ATOM",
-                                      [TK_SPECIAL_ATOM] = "SPECIAL_ATOM",
-                                      [TK_QUOTE] = "QUOTE",
-                                      [TK_INT_LITERAL] = "INT_LITERAL",
-                                      [TK_STR_LITERAL] = "STR_LITERAL",
-                                      [TK_BOOL_LITERAL] = "BOOL_LITERAL"
-
-  };
-
-  fprintf(stream, "Kind: %s\n", kinds[tk.kind]);
-  fprintf(stream, "Location: line_no = %lu, line_pos = %lu\n", tk.loc.line_no,
-          tk.loc.line_pos);
-
-  static const char* const format_i64_val = "Value: %lli\n";
-  static const char* const format_cstr_val = "Value: %s\n";
-  static const char* const format_cstr_val_str = "Value: \"%s\"\n";
-
-  switch (tk.kind) {
-    case TK_ATOM:
-      fprintf(stream, format_cstr_val, tk.value.as_cstr);
-      break;
-    case TK_STR_LITERAL:
-      fprintf(stream, format_cstr_val_str, tk.value.as_cstr);
-      break;
-    case TK_INT_LITERAL:
-      fprintf(stream, format_i64_val, tk.value.as_i64);
-      break;
-    case TK_BOOL_LITERAL:
-      fprintf(stream, format_cstr_val, tk.value.as_bool ? "#t" : "#f");
-      break;
-    case TK_SPECIAL_ATOM:
-      fprintf(stream, format_cstr_val, special_atoms[tk.value.as_special_atom]);
-      break;
-    case TK_INVALID:
-      fprintf(stream, "Error message: %s\n", tk.err_msg);
-    default:
-      break;
-  }
-
-  fprintf(stream, "\n");
-}
-
-static void lexer_deinit_defer__([[maybe_unused]] int* blank) {
-  lexer_deinit();
-}
-
-void fdump_tokens(FILE* stream,
-                  const char* const src_path,
-                  arena_ptr_t str_arena) {
-  lexer_init(src_path, str_arena);
-  m_defer(lexer_deinit_defer__);
-
-  token_t tk = lexer_next_token();
-  while (tk.kind != TK_EOS) {
-    fpprint_token(stream, tk);
-    tk = lexer_next_token();
-  }
-
-  fpprint_token(stream, tk);
-  fprintf(stream, "\n");
-}
-
 static parser_state_t g_parser = {
     .current_token = {.kind = TK_EOS, .loc = {.line_no = 0, .line_pos = 0}},
     .eos = true};
@@ -584,7 +513,7 @@ static program_tree_t* parse_binop(arena_ptr_t pt_arena,
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   return pt_make_binop(pt_arena, loc,
-                        spec_to_binop[op_tk.value.as_special_atom], lhs, rhs);
+                       spec_to_binop[op_tk.value.as_special_atom], lhs, rhs);
 }
 
 static program_tree_t* parse_if(arena_ptr_t ast_arena,
@@ -642,8 +571,8 @@ static program_tree_t* parse_let(arena_ptr_t ast_arena,
     return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   return pt_make_let(ast_arena, loc,
-                      (bind_pair_t){.name_id = id, .value_subtree = bind_value},
-                      expr);
+                     (bind_pair_t){.name_id = id, .value_subtree = bind_value},
+                     expr);
 }
 
 static vector_ptr_t collect_free(const program_tree_t* expr,
@@ -889,158 +818,4 @@ program_tree_t* parse(const char* const path,
   m_defer(parser_deinit_defer__);
 
   return parse_toplevel(pt_arena, str_arena);
-}
-
-static void fpprint_ast(FILE* stream, program_tree_t* ast);
-
-static void fpprint_ast_seq(FILE* stream,
-                            array_ptr_t /* [ast_t*] */ lst,
-                            char delim) {
-  size_t seq_sz = array_size(lst);
-  for (size_t i = 0; i < seq_sz - 1; i++) {
-    fpprint_ast(stream, array_data(program_tree_t*, lst)[i]);
-    fprintf(stream, "%c", delim);
-  }
-
-  if (seq_sz > 0)
-    fpprint_ast(stream, array_data(program_tree_t*, lst)[seq_sz - 1]);
-}
-
-static void fpprint_ast_if(FILE* stream, pt_if_form_t if_form) {
-  fprintf(stream, "if ");
-  fpprint_ast(stream, if_form.cond_subtree);
-  fprintf(stream, " then ");
-  fpprint_ast(stream, if_form.t_branch_subtree);
-  fprintf(stream, " else ");
-  fpprint_ast(stream, if_form.f_branch_subtree);
-}
-
-static void fpprint_ast_call(FILE* stream, pt_call_t call) {
-  fprintf(stream, "(");
-  fpprint_ast(stream, call.fn_subtree);
-  fprintf(stream, " ");
-  fpprint_ast_seq(stream, call.args_subtrees, ' ');
-  fprintf(stream, ")");
-}
-
-static const char* binop_repr(binop_t op) {
-  static const char* const sum = "+";
-  static const char* const sub = "-";
-  static const char* const mul = "*";
-  static const char* const div = "/";
-  static const char* const le = "<=";
-  static const char* const lt = "<";
-  static const char* const ge = ">=";
-  static const char* const gt = ">";
-  static const char* const eq = "=";
-  static const char* const neq = "/=";
-
-  switch (op) {
-    case BINOP_SUM:
-      return sum;
-    case BINOP_SUB:
-      return sub;
-    case BINOP_MUL:
-      return mul;
-    case BINOP_DIV:
-      return div;
-    case BINOP_LE:
-      return le;
-    case BINOP_LT:
-      return lt;
-    case BINOP_GE:
-      return ge;
-    case BINOP_GT:
-      return gt;
-    case BINOP_EQ:
-      return eq;
-    case BINOP_NEQ:
-      return neq;
-    case BINOP_COUNT__:
-      assert(false);
-      m_unreachable;
-  }
-}
-
-static void fpprint_ast_binop(FILE* stream, pt_binop_t binop) {
-  fprintf(stream, "(OP(%s) ", binop_repr(binop.op));
-  fpprint_ast(stream, binop.lhs);
-  fprintf(stream, " ");
-  fpprint_ast(stream, binop.rhs);
-  fprintf(stream, ")");
-}
-
-static void fpprint_ast_let(FILE* stream, pt_let_form_t let) {
-  fprintf(stream, "let $var%d := ", let.bind.name_id);
-  fpprint_ast(stream, let.bind.value_subtree);
-  fprintf(stream, " in ");
-  fpprint_ast(stream, let.expr_subtree);
-}
-
-static void fpprint_ast_lambda(FILE* stream, pt_lambda_t lambda) {
-  fprintf(stream, "[");
-  size_t captured_sz = array_size(lambda.captured);
-  for (size_t i = 0; i < captured_sz - 1; i++) {
-    fprintf(stream, "$var%d ", array_data(name_id_t, lambda.captured)[i]);
-  }
-  if (captured_sz > 0)
-    fprintf(stream, "$var%d",
-            array_data(name_id_t, lambda.captured)[captured_sz - 1]);
-  fprintf(stream, "]");
-  fprintf(stream, "\\");
-  array_ptr_t params = lambda.params;
-  size_t params_sz = array_size(params);
-
-  for (size_t i = 0; i < params_sz; i++) {
-    fprintf(stream, "$var%d ", array_data(name_id_t, params)[i]);
-  }
-
-  fprintf(stream, "-> ");
-  fpprint_ast(stream, lambda.body_subtree);
-}
-
-static void fpprint_ast(FILE* stream, program_tree_t* ast) {
-  switch (ast->kind) {
-    case PT_ERROR:
-      fprintf(stream, "ERROR(%s)", ast->err_msg);
-      break;
-    case PT_TOPLEVEL:
-      fpprint_ast_seq(stream, ast->value.as_subtree_list, '\n');
-      break;
-    case PT_BOOL_LITERAL:
-      fprintf(stream, "BOOL(%s)", ast->value.as_bool ? "true" : "false");
-      break;
-    case PT_INT_LITERAL:
-      fprintf(stream, "INT(%lli)", ast->value.as_i64);
-      break;
-    case PT_STR_LITERAL:
-      fprintf(stream, "STRING(%s)", ast->value.as_cstr);
-      break;
-    case PT_NAME:
-      fprintf(stream, "$var%d", ast->value.as_name_id);
-      break;
-    case PT_BINOP:
-      fpprint_ast_binop(stream, ast->value.as_binop);
-      break;
-    case PT_IF:
-      fpprint_ast_if(stream, ast->value.as_if_form);
-      break;
-    case PT_CALL:
-      fpprint_ast_call(stream, ast->value.as_call);
-      break;
-    case PT_LET:
-      fpprint_ast_let(stream, ast->value.as_let_form);
-      break;
-    case PT_LAMBDA:
-      fpprint_ast_lambda(stream, ast->value.as_lambda);
-      break;
-  }
-}
-
-void fdump_ast(FILE* stream,
-               const char* const src_path,
-               arena_ptr_t ast_arena,
-               arena_ptr_t str_arena) {
-  program_tree_t* ast = parse(src_path, ast_arena, str_arena);
-  fpprint_ast(stream, ast);
 }

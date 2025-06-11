@@ -4,6 +4,6 @@
 #include "arena.h"
 #include "program_tree.h"
 
-program_tree_t* to_mnf(program_tree_t* ast, arena_ptr_t arena);
+program_tree_t* to_mnf(program_tree_t* ast, arena_ptr_t pt_arena);
 
 #endif
