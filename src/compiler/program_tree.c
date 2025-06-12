@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "arena.h"
+#include "array.h"
 #include "program_tree.h"
 
 static program_tree_t* pt_make_node(arena_ptr_t pt_arena,
@@ -118,15 +119,22 @@ program_tree_t* pt_make_lambda(arena_ptr_t pt_arena,
 program_tree_t* pt_make_call(arena_ptr_t pt_arena,
                              loc_t loc,
                              program_tree_t* fn,
-                             array_ptr_t /* [ast_t*] */ args) {
+                             array_ptr_t /* [program_tree_t*] */ args) {
   return pt_make_node(
       pt_arena, loc, PT_CALL,
       (pt_value_t){.as_call = {.fn_subtree = fn, .args_subtrees = args}}, NULL);
 }
 
-static void fpprint_ast_seq(FILE* stream,
-                            array_ptr_t /* [ast_t*] */ lst,
-                            char delim) {
+program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
+                               loc_t loc,
+                               array_ptr_t /* [program_tree_t*] */ elems) {
+  return pt_make_node(pt_arena, loc, PT_VECTOR,
+                      (pt_value_t){.as_subtree_list = elems}, NULL);
+}
+
+static void fpprint_pt_seq(FILE* stream,
+                           array_ptr_t /* [program_tree_t*] */ lst,
+                           char delim) {
   size_t seq_sz = array_size(lst);
   for (size_t i = 0; i < seq_sz - 1; i++) {
     fpprint_pt(stream, array_data(program_tree_t*, lst)[i]);
@@ -137,7 +145,7 @@ static void fpprint_ast_seq(FILE* stream,
     fpprint_pt(stream, array_data(program_tree_t*, lst)[seq_sz - 1]);
 }
 
-static void fpprint_ast_if(FILE* stream, pt_if_form_t if_form) {
+static void fpprint_pt_if(FILE* stream, pt_if_form_t if_form) {
   fprintf(stream, "if ");
   fpprint_pt(stream, if_form.cond_subtree);
   fprintf(stream, " then ");
@@ -146,11 +154,11 @@ static void fpprint_ast_if(FILE* stream, pt_if_form_t if_form) {
   fpprint_pt(stream, if_form.f_branch_subtree);
 }
 
-static void fpprint_ast_call(FILE* stream, pt_call_t call) {
+static void fpprint_pt_call(FILE* stream, pt_call_t call) {
   fprintf(stream, "(");
   fpprint_pt(stream, call.fn_subtree);
   fprintf(stream, " ");
-  fpprint_ast_seq(stream, call.args_subtrees, ' ');
+  fpprint_pt_seq(stream, call.args_subtrees, ' ');
   fprintf(stream, ")");
 }
 
@@ -193,7 +201,7 @@ static const char* binop_repr(binop_t op) {
   }
 }
 
-static void fpprint_ast_binop(FILE* stream, pt_binop_t binop) {
+static void fpprint_pt_binop(FILE* stream, pt_binop_t binop) {
   fprintf(stream, "(OP(%s) ", binop_repr(binop.op));
   fpprint_pt(stream, binop.lhs);
   fprintf(stream, " ");
@@ -201,14 +209,14 @@ static void fpprint_ast_binop(FILE* stream, pt_binop_t binop) {
   fprintf(stream, ")");
 }
 
-static void fpprint_ast_let(FILE* stream, pt_let_form_t let) {
+static void fpprint_pt_let(FILE* stream, pt_let_form_t let) {
   fprintf(stream, "let $var%d := ", let.bind.name_id);
   fpprint_pt(stream, let.bind.value_subtree);
   fprintf(stream, " in ");
   fpprint_pt(stream, let.expr_subtree);
 }
 
-static void fpprint_ast_lambda(FILE* stream, pt_lambda_t lambda) {
+static void fpprint_pt_lambda(FILE* stream, pt_lambda_t lambda) {
   fprintf(stream, "[");
   size_t captured_sz = array_size(lambda.captured);
   for (size_t i = 0; i < captured_sz - 1; i++) {
@@ -230,13 +238,19 @@ static void fpprint_ast_lambda(FILE* stream, pt_lambda_t lambda) {
   fpprint_pt(stream, lambda.body_subtree);
 }
 
+static void fpprint_pt_vector(FILE* stream, array_ptr_t elems) {
+  fprintf(stream, "{");
+  fpprint_pt_seq(stream, elems, ' ');
+  fprintf(stream, "}");
+}
+
 void fpprint_pt(FILE* stream, program_tree_t* pt) {
   switch (pt->kind) {
     case PT_ERROR:
       fprintf(stream, "ERROR(%s)", pt->err_msg);
       break;
     case PT_TOPLEVEL:
-      fpprint_ast_seq(stream, pt->value.as_subtree_list, '\n');
+      fpprint_pt_seq(stream, pt->value.as_subtree_list, '\n');
       fprintf(stream, "\n");
       break;
     case PT_BOOL_LITERAL:
@@ -252,19 +266,22 @@ void fpprint_pt(FILE* stream, program_tree_t* pt) {
       fprintf(stream, "$var%d", pt->value.as_name_id);
       break;
     case PT_BINOP:
-      fpprint_ast_binop(stream, pt->value.as_binop);
+      fpprint_pt_binop(stream, pt->value.as_binop);
       break;
     case PT_IF:
-      fpprint_ast_if(stream, pt->value.as_if_form);
+      fpprint_pt_if(stream, pt->value.as_if_form);
       break;
     case PT_CALL:
-      fpprint_ast_call(stream, pt->value.as_call);
+      fpprint_pt_call(stream, pt->value.as_call);
       break;
     case PT_LET:
-      fpprint_ast_let(stream, pt->value.as_let_form);
+      fpprint_pt_let(stream, pt->value.as_let_form);
       break;
     case PT_LAMBDA:
-      fpprint_ast_lambda(stream, pt->value.as_lambda);
+      fpprint_pt_lambda(stream, pt->value.as_lambda);
+      break;
+    case PT_VECTOR:
+      fpprint_pt_vector(stream, pt->value.as_subtree_list);
       break;
   }
 }

@@ -28,7 +28,6 @@ typedef enum {
   SPEC_AND,
   SPEC_OR,
   SPEC_LAMBDA,
-  SPEC_DO,
   SPEC_VECTOR,
   SPEC_COUNT__
 } special_atom_t;

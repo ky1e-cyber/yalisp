@@ -1,4 +1,3 @@
-#include "defs.h"
 #pragma clang diagnostic ignored "-Wformat-security"
 
 #include <assert.h>
@@ -23,68 +22,42 @@
 
 typedef enum { HASH_TRUE = 0, HASH_FALSE, HASH_COUNT__ } hash_literal_t;
 
-static const char* const UNEXP_LEX_ERR_FMT =
-    "Unexpected character encountered at %lu:%lu";
-static const char* const NUM_LEX_ERR_FMT = "Invalid numeric literal at %lu:%lu";
-static const char* const INT_LEX_OUTOFRANGE_FMT =
-    "Int literal's value is too big at %lu:%lu";
-static const char* const ATOM_LEX_ERR_FMT = "Invalid atom at %lu:%lu";
-static const char* const STR_LEX_ERR_FMT = "Invalid string literal at %lu:%lu";
-static const char* const STR_LEX_INVALID_ESCAPE_FMT =
-    "Invalid escape in string literal at %lu:%lu";
-
-static char UNCLOSED_LIST_ERR_FMT[] = "Unclosed list encountered at %lu:%lu";
-
-static const char* const UNEXP_FMT = "Unexpected token at %lu:%lu";
-static const char* const UNEXP_SPECIAL_ATOM_FMT =
-    "Unexpected special atom encountered at %lu:%lu";
-
-static const char* const MALFORMED_FORM_FMT = "Malformed form at %lu:%lu";
-static const char* const UNDEFINED_NAME_FMT = "Undefined name at %lu:%lu";
-
-static const char* const hash_true = "t";
-static const char* const hash_false = "f";
-
 static const char* const hash_literals[] =
-    {[HASH_TRUE] = hash_true, [HASH_FALSE] = hash_false};
-
-static const char* const special_define = "define";
-static const char* const special_let = "let";
-static const char* const special_lambda = "lambda";
-static const char* const special_plus = "+";
-static const char* const special_minus = "-";
-static const char* const special_star = "*";
-static const char* const special_slash = "/";
-static const char* const special_if = "if";
-static const char* const special_eq = "=";
-
-static const char* const special_neq = "/=";
-static const char* const special_lt = "<";
-static const char* const special_le = "<=";
-static const char* const special_gt = ">";
-static const char* const special_ge = ">=";
-
-static const char* const special_not = "not";
-static const char* const special_and = "and";
-static const char* const special_or = "or";
-
-static const char* const special_do = "do";
+    {[HASH_TRUE] = "t", [HASH_FALSE] = "f"};
 
 static const char* const special_atoms[] = {
-    [SPEC_DEFINE] = special_define, [SPEC_LET] = special_let,
-    [SPEC_PLUS] = special_plus,     [SPEC_MINUS] = special_minus,
-    [SPEC_STAR] = special_star,     [SPEC_SLASH] = special_slash,
-    [SPEC_IF] = special_if,         [SPEC_EQ] = special_eq,
-    [SPEC_NEQ] = special_neq,       [SPEC_LT] = special_lt,
-    [SPEC_LE] = special_le,         [SPEC_GT] = special_gt,
-    [SPEC_GE] = special_ge,         [SPEC_NOT] = special_not,
-    [SPEC_AND] = special_and,       [SPEC_OR] = special_or,
-    [SPEC_LAMBDA] = special_lambda, [SPEC_DO] = special_do,
-    [SPEC_VECTOR] = special_do};
+    [SPEC_DEFINE] = "define", [SPEC_LET] = "let",
+    [SPEC_PLUS] = "+",        [SPEC_MINUS] = "-",
+    [SPEC_STAR] = "*",        [SPEC_SLASH] = "/",
+    [SPEC_IF] = "if",         [SPEC_EQ] = "=",
+    [SPEC_NEQ] = "/=",        [SPEC_LT] = "<",
+    [SPEC_LE] = "<=",         [SPEC_GT] = ">",
+    [SPEC_GE] = ">=",         [SPEC_NOT] = "not",
+    [SPEC_AND] = "and",       [SPEC_OR] = "or",
+    [SPEC_LAMBDA] = "lambda", [SPEC_VECTOR] = "vector"};
 
 static const special_atom_t spec_binops[] = {
     SPEC_PLUS, SPEC_MINUS, SPEC_STAR, SPEC_SLASH, SPEC_LE,
     SPEC_LT,   SPEC_GE,    SPEC_GT,   SPEC_EQ,    SPEC_NEQ};
+
+static const char UNEXP_LEX_ERR_FMT[] =
+    "Unexpected character encountered at %lu:%lu";
+static const char NUM_LEX_ERR_FMT[] = "Invalid numeric literal at %lu:%lu";
+static const char INT_LEX_OUTOFRANGE_FMT[] =
+    "Int literal's value is too big at %lu:%lu";
+static const char ATOM_LEX_ERR_FMT[] = "Invalid atom at %lu:%lu";
+static const char STR_LEX_ERR_FMT[] = "Invalid string literal at %lu:%lu";
+static const char STR_LEX_INVALID_ESCAPE_FMT[] =
+    "Invalid escape in string literal at %lu:%lu";
+
+static char UNCLOSED_LIST_ERR_FMT[] = "Unclosed list encountered at %lu:%lu";
+
+static const char UNEXP_FMT[] = "Unexpected token at %lu:%lu";
+static const char UNEXP_SPECIAL_ATOM_FMT[] =
+    "Unexpected special atom encountered at %lu:%lu";
+
+static const char MALFORMED_FORM_FMT[] = "Malformed form at %lu:%lu";
+static const char UNDEFINED_NAME_FMT[] = "Undefined name at %lu:%lu";
 
 m_macro_like bool is_whitespace(int c) {
   return (c == ' ' || c == '\t' || c == '\n');
@@ -488,6 +461,32 @@ static program_tree_t* parse_expr(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
                                   table_t env);
 
+static array_ptr_t /* [program_tree_t*] */
+parse_list_tail(arena_ptr_t pt_arena, arena_ptr_t str_arena, table_t env) {
+  vector_ptr_t buf m_cleanup(vector_cleanup) =
+      vector_make(program_tree_t*, alloc_default, error_parser_buf);
+
+  token_t nxt_tk = parser_next_token_peek();
+  while (nxt_tk.kind != TK_ROUND_PAREN_C) {
+    if (nxt_tk.kind == TK_EOS)
+      return NULL;
+
+    program_tree_t* nxt = parse_expr(pt_arena, str_arena, env);
+    buf = vector_push_back(program_tree_t*, buf, nxt);
+
+    nxt_tk = parser_next_token_peek();
+  }
+  token_t paren_c = parser_next_token_consume();
+  assert(paren_c.kind == TK_ROUND_PAREN_C);
+
+  size_t args_sz = vector_size(buf);
+
+  array_ptr_t lst = array_make_arena(program_tree_t*, pt_arena, args_sz);
+  vector_copy_data(program_tree_t*, buf, array_baseptr(lst));
+
+  return lst;
+}
+
 static program_tree_t* parse_binop(arena_ptr_t pt_arena,
                                    arena_ptr_t str_arena,
                                    table_t env) {
@@ -516,7 +515,7 @@ static program_tree_t* parse_binop(arena_ptr_t pt_arena,
                        spec_to_binop[op_tk.value.as_special_atom], lhs, rhs);
 }
 
-static program_tree_t* parse_if(arena_ptr_t ast_arena,
+static program_tree_t* parse_if(arena_ptr_t pt_arena,
                                 arena_ptr_t str_arena,
                                 table_t env) {
   token_t if_tk = parser_next_token_consume();
@@ -525,18 +524,18 @@ static program_tree_t* parse_if(arena_ptr_t ast_arena,
   assert(if_tk.kind == TK_SPECIAL_ATOM &&
          if_tk.value.as_special_atom == SPEC_IF);
 
-  program_tree_t* cond = parse_expr(ast_arena, str_arena, env);
-  program_tree_t* t_branch = parse_expr(ast_arena, str_arena, env);
-  program_tree_t* f_branch = parse_expr(ast_arena, str_arena, env);
+  program_tree_t* cond = parse_expr(pt_arena, str_arena, env);
+  program_tree_t* t_branch = parse_expr(pt_arena, str_arena, env);
+  program_tree_t* f_branch = parse_expr(pt_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
   if (paren_c.kind != TK_ROUND_PAREN_C)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
-  return pt_make_if(ast_arena, loc, cond, t_branch, f_branch);
+  return pt_make_if(pt_arena, loc, cond, t_branch, f_branch);
 }
 
-static program_tree_t* parse_let(arena_ptr_t ast_arena,
+static program_tree_t* parse_let(arena_ptr_t pt_arena,
                                  arena_ptr_t str_arena,
                                  table_t env) {
   token_t let = parser_next_token_consume();
@@ -547,32 +546,59 @@ static program_tree_t* parse_let(arena_ptr_t ast_arena,
   token_t paren_o = parser_next_token_peek();
 
   if (paren_o.kind != TK_ROUND_PAREN_O)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   parser_next_token_consume();
   token_t name_atom = parser_next_token_consume();
 
   if (name_atom.kind != TK_ATOM)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   name_id_t id = g_names_cnt++;
   table_t local_env = table_add(env, name_atom.value.as_cstr, id);
 
-  program_tree_t* bind_value = parse_expr(ast_arena, str_arena, local_env);
+  program_tree_t* bind_value = parse_expr(pt_arena, str_arena, local_env);
 
   token_t paren_c = parser_next_token_consume();
   if (paren_c.kind != TK_ROUND_PAREN_C)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
-  program_tree_t* expr = parse_expr(ast_arena, str_arena, local_env);
+  program_tree_t* expr = parse_expr(pt_arena, str_arena, local_env);
 
   token_t form_close = parser_next_token_consume();
   if (form_close.kind != TK_ROUND_PAREN_C)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
-  return pt_make_let(ast_arena, loc,
+  return pt_make_let(pt_arena, loc,
                      (bind_pair_t){.name_id = id, .value_subtree = bind_value},
                      expr);
+}
+
+static program_tree_t* parse_vector(arena_ptr_t pt_arena,
+                                    arena_ptr_t str_arena,
+                                    table_t env) {
+  token_t vector_tk = parser_next_token_consume();
+  loc_t loc = vector_tk.loc;
+  assert(vector_tk.kind == TK_SPECIAL_ATOM &&
+         vector_tk.value.as_special_atom == SPEC_VECTOR);
+
+  array_ptr_t elems = parse_list_tail(pt_arena, str_arena, env);
+  if (elems == NULL)
+    return pt_error_at(pt_arena, str_arena, loc, UNCLOSED_LIST_ERR_FMT);
+
+  return pt_make_vector(pt_arena, loc, elems);
+}
+
+static vector_ptr_t collect_free(const program_tree_t* expr,
+                                 table_t env,
+                                 vector_ptr_t acc);
+
+static vector_ptr_t collect_free_seq(array_ptr_t /* [program_tree_t*] */ exprs,
+                                     table_t env,
+                                     vector_ptr_t acc) {
+  for (size_t i = 0; i < array_size(exprs); i++)
+    acc = collect_free(array_data(program_tree_t*, exprs)[i], env, acc);
+  return acc;
 }
 
 static vector_ptr_t collect_free(const program_tree_t* expr,
@@ -585,46 +611,58 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
     case PT_ERROR:
       return acc;
     case PT_LET:;
-      pt_let_form_t let = expr->value.as_let_form;
-      env = table_add(env, NULL, let.bind.name_id);
-      acc = collect_free(expr->value.as_let_form.bind.value_subtree, env, acc);
-      return collect_free(expr->value.as_let_form.expr_subtree, env, acc);
+      {
+        pt_let_form_t let = expr->value.as_let_form;
+        env = table_add(env, NULL, let.bind.name_id);
+        acc =
+            collect_free(expr->value.as_let_form.bind.value_subtree, env, acc);
+        return collect_free(expr->value.as_let_form.expr_subtree, env, acc);
+      }
     case PT_LAMBDA:;
-      array_ptr_t captured = expr->value.as_lambda.captured;
-      for (size_t i = 0; i < array_size(captured); i++) {
-        name_id_t id = array_data(name_id_t, captured)[i];
+      {
+        array_ptr_t captured = expr->value.as_lambda.captured;
+        for (size_t i = 0; i < array_size(captured); i++) {
+          name_id_t id = array_data(name_id_t, captured)[i];
+          if (!table_contains(env, id))
+            acc = vector_push_back(name_id_t, acc, id);
+        }
+
+        return acc;
+      }
+    case PT_IF:;
+      {
+        acc = collect_free(expr->value.as_if_form.cond_subtree, env, acc);
+        acc = collect_free(expr->value.as_if_form.t_branch_subtree, env, acc);
+        return collect_free(expr->value.as_if_form.f_branch_subtree, env, acc);
+      }
+    case PT_BINOP:;
+      {
+        acc = collect_free(expr->value.as_binop.lhs, env, acc);
+        return collect_free(expr->value.as_binop.rhs, env, acc);
+      }
+    case PT_CALL:;
+      {
+        acc = collect_free(expr->value.as_call.fn_subtree, env, acc);
+        return collect_free_seq(expr->value.as_call.args_subtrees, env, acc);
+      }
+    case PT_NAME:;
+      {
+        name_id_t id = expr->value.as_name_id;
         if (!table_contains(env, id))
           acc = vector_push_back(name_id_t, acc, id);
+        return acc;
       }
-
-      return acc;
-    case PT_IF:
-      acc = collect_free(expr->value.as_if_form.cond_subtree, env, acc);
-      acc = collect_free(expr->value.as_if_form.t_branch_subtree, env, acc);
-      return collect_free(expr->value.as_if_form.f_branch_subtree, env, acc);
-    case PT_BINOP:
-      acc = collect_free(expr->value.as_binop.lhs, env, acc);
-      return collect_free(expr->value.as_binop.rhs, env, acc);
-    case PT_CALL:
-      acc = collect_free(expr->value.as_call.fn_subtree, env, acc);
-      array_ptr_t args = expr->value.as_call.args_subtrees;
-      for (size_t i = 0; i < array_size(args); i++)
-        acc = collect_free(array_data(program_tree_t*, args)[i], env, acc);
-      return acc;
-    case PT_NAME:;
-      name_id_t id = expr->value.as_name_id;
-      if (!table_contains(env, id))
-        acc = vector_push_back(name_id_t, acc, id);
-      return acc;
-    case PT_TOPLEVEL:
-      assert(false);
-      m_unreachable;
+    case PT_VECTOR:
+      return collect_free_seq(expr->value.as_subtree_list, env, acc);
+    case PT_TOPLEVEL:;
+      {
+        assert(false);
+        m_unreachable;
+      }
   }
-
-  m_unreachable;
 }
 
-static program_tree_t* parse_lambda(arena_ptr_t ast_arena,
+static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
                                     arena_ptr_t str_arena,
                                     table_t env) {
   token_t lambd_tk = parser_next_token_consume();
@@ -640,12 +678,12 @@ static program_tree_t* parse_lambda(arena_ptr_t ast_arena,
 
   token_t paren_o = parser_next_token_consume();
   if (paren_o.kind != TK_ROUND_PAREN_O)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   token_t nxt = parser_next_token_consume();
   while (nxt.kind != TK_ROUND_PAREN_C) {
     if (nxt.kind != TK_ATOM)
-      return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+      return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
     name_id_t id = g_names_cnt++;
     env = table_add(env, nxt.value.as_cstr, id);
@@ -656,14 +694,14 @@ static program_tree_t* parse_lambda(arena_ptr_t ast_arena,
 
   size_t buf_sz = vector_size(params_buf);
 
-  array_ptr_t params = array_make_arena(name_id_t, ast_arena, buf_sz);
+  array_ptr_t params = array_make_arena(name_id_t, pt_arena, buf_sz);
   vector_copy_data(name_id_t, params_buf, array_baseptr(params));
 
-  program_tree_t* body = parse_expr(ast_arena, str_arena, env);
+  program_tree_t* body = parse_expr(pt_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
   if (paren_c.kind != TK_ROUND_PAREN_C)
-    return pt_error_at(ast_arena, str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   vector_ptr_t frees_buf m_cleanup(vector_cleanup) =
       vector_make(name_id_t, alloc_default, error_parser_buf);
@@ -677,13 +715,13 @@ static program_tree_t* parse_lambda(arena_ptr_t ast_arena,
   frees_buf = collect_free(body, lambda_env, frees_buf);
 
   array_ptr_t captured =
-      array_make_arena(name_id_t, ast_arena, vector_size(frees_buf));
+      array_make_arena(name_id_t, pt_arena, vector_size(frees_buf));
   vector_copy_data(name_id_t, frees_buf, array_baseptr(captured));
 
-  return pt_make_lambda(ast_arena, loc, params, captured, body);
+  return pt_make_lambda(pt_arena, loc, params, captured, body);
 }
 
-static program_tree_t* parse_list(arena_ptr_t ast_arena,
+static program_tree_t* parse_list(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
                                   table_t env) {
   token_t paren_o = parser_next_token_consume();
@@ -696,49 +734,36 @@ static program_tree_t* parse_list(arena_ptr_t ast_arena,
     special_atom_t spec = fst.value.as_special_atom;
 
     if (spec == SPEC_LET)
-      return parse_let(ast_arena, str_arena, env);
+      return parse_let(pt_arena, str_arena, env);
 
     if (spec == SPEC_IF)
-      return parse_if(ast_arena, str_arena, env);
+      return parse_if(pt_arena, str_arena, env);
 
     if (spec == SPEC_LAMBDA)
-      return parse_lambda(ast_arena, str_arena, env);
+      return parse_lambda(pt_arena, str_arena, env);
+
+    if (spec == SPEC_VECTOR)
+      return parse_vector(pt_arena, str_arena, env);
 
     if (m_contains(spec, spec_binops,
                    sizeof(spec_binops) / sizeof(special_atom_t))) {
-      return parse_binop(ast_arena, str_arena, env);
+      return parse_binop(pt_arena, str_arena, env);
     }
 
     parser_next_token_consume();
-    return pt_error_at(ast_arena, str_arena, loc, UNEXP_FMT);
+    return pt_error_at(pt_arena, str_arena, loc, UNEXP_FMT);
   }
 
-  program_tree_t* fn = parse_expr(ast_arena, str_arena, env);
+  program_tree_t* fn = parse_expr(pt_arena, str_arena, env);
 
-  vector_ptr_t buf m_cleanup(vector_cleanup) =
-      vector_make(program_tree_t*, alloc_default, error_parser_buf);
+  array_ptr_t args = parse_list_tail(pt_arena, str_arena, env);
+  if (args == NULL)
+    return pt_error_at(pt_arena, str_arena, loc, UNCLOSED_LIST_ERR_FMT);
 
-  token_t nxt_tk = parser_next_token_peek();
-  while (nxt_tk.kind != TK_ROUND_PAREN_C) {
-    if (nxt_tk.kind == TK_EOS)
-      return pt_error_at(ast_arena, str_arena, loc, UNCLOSED_LIST_ERR_FMT);
-
-    program_tree_t* nxt = parse_expr(ast_arena, str_arena, env);
-    buf = vector_push_back(program_tree_t*, buf, nxt);
-
-    nxt_tk = parser_next_token_peek();
-  }
-  parser_next_token_consume();
-
-  size_t args_sz = vector_size(buf);
-
-  array_ptr_t args = array_make_arena(program_tree_t*, ast_arena, args_sz);
-  vector_copy_data(program_tree_t*, buf, array_baseptr(args));
-
-  return pt_make_call(ast_arena, loc, fn, args);
+  return pt_make_call(pt_arena, loc, fn, args);
 }
 
-static program_tree_t* parse_expr(arena_ptr_t ast_arena,
+static program_tree_t* parse_expr(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
                                   table_t env) {
   token_t tk = parser_next_token_peek();
@@ -746,69 +771,69 @@ static program_tree_t* parse_expr(arena_ptr_t ast_arena,
 
   if (tk.kind == TK_INVALID) {
     parser_next_token_consume();
-    return pt_make_error(ast_arena, loc, tk.err_msg);
+    return pt_make_error(pt_arena, loc, tk.err_msg);
   }
 
   if (tk.kind == TK_ATOM) {
     token_t atom_name = parser_next_token_consume();
     name_id_t id = table_lookup(env, atom_name.value.as_cstr);
     if (id == -1)
-      return pt_error_at(ast_arena, str_arena, loc, UNDEFINED_NAME_FMT);
+      return pt_error_at(pt_arena, str_arena, loc, UNDEFINED_NAME_FMT);
 
-    return pt_make_name(ast_arena, loc, id);
+    return pt_make_name(pt_arena, loc, id);
   }
 
   if (tk.kind == TK_ROUND_PAREN_O) {
-    return parse_list(ast_arena, str_arena, env);
+    return parse_list(pt_arena, str_arena, env);
   }
 
   if (tk.kind == TK_BOOL_LITERAL) {
     parser_next_token_consume();
-    return pt_make_bool_literal(ast_arena, tk.loc, tk.value.as_bool);
+    return pt_make_bool_literal(pt_arena, tk.loc, tk.value.as_bool);
   }
 
   if (tk.kind == TK_INT_LITERAL) {
     parser_next_token_consume();
-    return pt_make_i64_literal(ast_arena, tk.loc, tk.value.as_i64);
+    return pt_make_i64_literal(pt_arena, tk.loc, tk.value.as_i64);
   }
 
   if (tk.kind == TK_STR_LITERAL) {
     parser_next_token_consume();
-    return pt_make_string_literal(ast_arena, tk.loc, tk.value.as_cstr);
+    return pt_make_string_literal(pt_arena, tk.loc, tk.value.as_cstr);
   }
 
   if (tk.kind == TK_SPECIAL_ATOM) {
     parser_next_token_consume();
-    return pt_error_at(ast_arena, str_arena, tk.loc, UNEXP_SPECIAL_ATOM_FMT);
+    return pt_error_at(pt_arena, str_arena, tk.loc, UNEXP_SPECIAL_ATOM_FMT);
   }
 
   parser_next_token_consume();
-  return pt_error_at(ast_arena, str_arena, tk.loc, UNEXP_LEX_ERR_FMT);
+  return pt_error_at(pt_arena, str_arena, tk.loc, UNEXP_LEX_ERR_FMT);
 }
 
-static program_tree_t* parse_toplevel(arena_ptr_t ast_arena,
+static program_tree_t* parse_toplevel(arena_ptr_t pt_arena,
                                       arena_ptr_t str_arena) {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
       vector_make(program_tree_t*, alloc_default, error_parser_buf);
 
   arena_ptr_t env_arena m_cleanup(arena_cleanup) =
-      arena_make(PARSER_ENV_ARENA_SIZE, alloc_default, error_parser_env);
+      arena_make(g_parser_env_arena_size, alloc_default, error_parser_env);
   table_t env = table_make(env_arena);
 
   token_t nxt = parser_next_token_peek();
 
   while (nxt.kind != TK_EOS) {
-    program_tree_t* expr = parse_expr(ast_arena, str_arena, env);
+    program_tree_t* expr = parse_expr(pt_arena, str_arena, env);
     buf = vector_push_back(program_tree_t*, buf, expr);
     nxt = parser_next_token_peek();
   }
 
   size_t buf_sz = vector_size(buf);
 
-  array_ptr_t toplvl_lst = array_make_arena(program_tree_t*, ast_arena, buf_sz);
+  array_ptr_t toplvl_lst = array_make_arena(program_tree_t*, pt_arena, buf_sz);
   vector_copy_data(program_tree_t*, buf, array_baseptr(toplvl_lst));
 
-  return pt_make_toplevel(ast_arena, toplvl_lst);
+  return pt_make_toplevel(pt_arena, toplvl_lst);
 }
 
 program_tree_t* parse(const char* const path,

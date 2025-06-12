@@ -61,13 +61,17 @@ static rco_pair_t rco_atom(program_tree_t* expr,
     case PT_CALL:
     case PT_BINOP:
     case PT_IF:
-      value = to_mnf_expr(expr, pt_arena);
-      break;
-
+    case PT_VECTOR:;
+      {
+        value = to_mnf_expr(expr, pt_arena);
+        break;
+      }
     case PT_TOPLEVEL:
-    case PT_ERROR:
-      assert(false);
-      m_unreachable;
+    case PT_ERROR:;
+      {
+        assert(false);
+        m_unreachable;
+      }
   }
 
   name_id_t id = g_names_cnt++;
@@ -93,6 +97,19 @@ static program_tree_t* unfold_binds(program_tree_t* expr,
   size_t binds_sz = vector_size(binds);
   return binds_sz == 0 ? expr
                        : unfold_binds_tail(expr, binds, pt_arena, binds_sz - 1);
+}
+
+static vector_ptr_t atomize_seq(array_ptr_t /* [program_tree_t*] */ exprs,
+                                arena_ptr_t pt_arena,
+                                vector_ptr_t binds) {
+  for (size_t i = 0; i < array_size(exprs); i++) {
+    program_tree_t* expr = array_data(program_tree_t*, exprs)[i];
+    rco_pair_t rco_expr = rco_atom(expr, pt_arena, binds);
+    binds = rco_expr.mappings;
+    array_data(program_tree_t*, exprs)[i] = rco_expr.atomic_pt;
+  }
+
+  return binds;
 }
 
 static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
@@ -126,21 +143,20 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
         rco_pair_t rco_fn =
             rco_atom(expr->value.as_call.fn_subtree, pt_arena, binds);
         binds = rco_fn.mappings;
-
         expr->value.as_call.fn_subtree = rco_fn.atomic_pt;
 
-        array_ptr_t call_args = expr->value.as_call.args_subtrees;
-        for (size_t i = 0; i < array_size(call_args); i++) {
-          program_tree_t* arg = array_data(program_tree_t*, call_args)[i];
-          if (!is_atomic(arg)) {
-            rco_pair_t rco = rco_atom(arg, pt_arena, binds);
-            binds = rco.mappings;
-            array_data(program_tree_t*, call_args)[i] = rco.atomic_pt;
-          }
-        }
+        binds = atomize_seq(expr->value.as_call.args_subtrees, pt_arena, binds);
+
         return unfold_binds(expr, binds, pt_arena);
       }
+    case PT_VECTOR:;
+      {
+        vector_ptr_t binds m_cleanup(vector_cleanup) =
+            vector_make(bind_pair_t, alloc_default, error_pass_buf);
+        binds = atomize_seq(expr->value.as_subtree_list, pt_arena, binds);
 
+        return unfold_binds(expr, binds, pt_arena);
+      }
     case PT_BINOP:;
       {
         vector_ptr_t binds m_cleanup(vector_cleanup) =
@@ -176,9 +192,11 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
         return unfold_binds(expr, binds, pt_arena);
       }
     case PT_TOPLEVEL:
-    case PT_ERROR:
-      assert(false);
-      m_unreachable;
+    case PT_ERROR:;
+      {
+        assert(false);
+        m_unreachable;
+      }
   }
 }
 

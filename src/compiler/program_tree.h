@@ -69,6 +69,7 @@ typedef enum {
   PT_IF,
   PT_LAMBDA,
   PT_CALL,
+  PT_VECTOR,
 } pt_kind_t;
 
 typedef union {
@@ -146,6 +147,10 @@ program_tree_t* pt_make_call(arena_ptr_t pt_arena,
                              loc_t loc,
                              program_tree_t* fn,
                              array_ptr_t /* [program_tree_t*] */ args);
+
+program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
+                               loc_t loc,
+                               array_ptr_t /* [program_tree_t*] */ elems);
 
 void fpprint_pt(FILE* stream, program_tree_t* pt);
 

@@ -11,16 +11,22 @@
 #include "passes.h"
 #include "program_tree.h"
 
+static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt);
+
+static int dump_parser_errors_and_die_seq(
+    array_ptr_t /* [program_tree_t*] */ subtrees,
+    int cnt) {
+  for (size_t i = 0; i < array_size(subtrees); i++)
+    cnt += dump_parser_errors_and_die_tail(
+        array_data(program_tree_t*, subtrees)[i], 0);
+  return cnt;
+}
+
 static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt) {
   switch (pt->kind) {
-    case PT_TOPLEVEL:;
-      {
-        array_ptr_t exprs = pt->value.as_subtree_list;
-        for (size_t i = 0; i < array_size(exprs); i++)
-          cnt += dump_parser_errors_and_die_tail(
-              array_data(program_tree_t*, exprs)[i], 0);
-        return cnt;
-      }
+    case PT_TOPLEVEL:
+    case PT_VECTOR:
+      return dump_parser_errors_and_die_seq(pt->value.as_subtree_list, cnt);
     case PT_BOOL_LITERAL:
     case PT_INT_LITERAL:
     case PT_STR_LITERAL:
@@ -46,13 +52,8 @@ static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt) {
     case PT_CALL:;
       {
         cnt += dump_parser_errors_and_die_tail(pt->value.as_call.fn_subtree, 0);
-
-        array_ptr_t args = pt->value.as_call.args_subtrees;
-        for (size_t i = 0; i < array_size(args); i++)
-          cnt += dump_parser_errors_and_die_tail(
-              array_data(program_tree_t*, args)[i], 0);
-
-        return cnt;
+        return dump_parser_errors_and_die_seq(pt->value.as_call.args_subtrees,
+                                              cnt);
       }
     case PT_IF:;
       {
@@ -103,6 +104,7 @@ int main(int argc, char* argv[]) {
     return 1;
 
   fpprint_pt(stdout, pt);
+  printf("\n");
 
   program_tree_t* mnf = to_mnf(pt, pt_arena);
 
