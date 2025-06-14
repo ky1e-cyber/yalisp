@@ -2,11 +2,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "arena.h"
 #include "array.h"
 #include "defs.h"
 #include "error.h"
-#include "macros.h"
 #include "parser.h"
 #include "passes.h"
 #include "program_tree.h"
@@ -88,9 +86,6 @@ int main(int argc, char* argv[]) {
 
   const char* const src_path = argv[1];
 
-  arena_ptr_t pt_arena m_cleanup(arena_cleanup) =
-      arena_make(1 << 20, error_arena_alloc);
-
   shared_init(STR_ARENA_SIZE, PT_ARENA_SIZE, GLOBALS_ARENA_SIZE,
               ENV_ARENA_SIZE);
   program_tree_t* pt = parse(src_path);
@@ -103,7 +98,7 @@ int main(int argc, char* argv[]) {
   fpprint_pt(stdout, pt);
   printf("\n");
 
-  program_tree_t* mnf = to_mnf(pt, pt_arena);
+  program_tree_t* mnf = to_mnf(pt);
 
   fpprint_pt(stdout, mnf);
 
