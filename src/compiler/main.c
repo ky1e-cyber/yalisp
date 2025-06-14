@@ -98,6 +98,8 @@ int main(int argc, char* argv[]) {
   if (dump_parser_errors_and_die_check(pt))
     return 1;
 
+  register_lambdas(pt);
+
   fpprint_pt(stdout, pt);
   printf("\n");
 

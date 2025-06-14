@@ -6,13 +6,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "array.h"
-#include "shared.h"
 #include "token.h"
 
 typedef struct program_tree_t__ program_tree_t;
 
 typedef struct {
-  name_id_t name_id;
+  int name_id;
   program_tree_t* value_subtree;
 } bind_pair_t;
 
@@ -33,6 +32,7 @@ typedef struct {
 } pt_if_form_t;
 
 typedef struct {
+  int id;
   array_ptr_t /* [name_id_t] */ params;
   array_ptr_t /* [name_id_t] */ captured;
   program_tree_t* body_subtree;
@@ -79,7 +79,7 @@ typedef union {
   bool as_bool;
   int64_t as_i64;
   const char* as_cstr;
-  name_id_t as_name_id;
+  int as_name_id;
   program_tree_t* as_subtree;
   pt_binop_t as_binop;
   pt_call_t as_call;
@@ -120,7 +120,7 @@ program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
 
 program_tree_t* pt_make_name(arena_ptr_t pt_arena,
                              loc_t loc,
-                             name_id_t name_id);
+                             int name_id);
 
 program_tree_t* pt_make_binop(arena_ptr_t pt_arena,
                               loc_t loc,

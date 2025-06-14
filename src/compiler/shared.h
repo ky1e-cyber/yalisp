@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include "arena.h"
 #include "globals_table.h"
+#include "program_tree.h"
 
-typedef int name_id_t;
-extern name_id_t g_names_cnt;
+extern int g_names_cnt;
 
 extern size_t g_pt_arena_size;
 extern size_t g_parser_env_arena_size;
@@ -22,11 +22,16 @@ extern arena_ptr_t g_env_arena;
 
 extern globals_table_t g_globals_table;
 
+extern int g_lambdas_cnt;
+extern pt_lambda_t* g_lambdas;
+
 void shared_init(size_t str_arena_size,
                  size_t pt_arena_size,
                  size_t globals_arena_size,
                  size_t env_arena_size);
 
 void shared_deinit();
+
+void register_lambdas(program_tree_t* pt_toplevel);
 
 #endif

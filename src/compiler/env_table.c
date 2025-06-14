@@ -1,13 +1,12 @@
 #include <string.h>
 #include "arena.h"
 #include "env_table.h"
-#include "shared.h"
 
 env_table_t env_table_make(arena_ptr_t arena) {
   return (env_table_t){.arena = arena, .head = NULL};
 }
 
-env_table_t env_table_add(env_table_t table, const char* key, name_id_t value) {
+env_table_t env_table_add(env_table_t table, const char* key, int value) {
   env_table_node_t* node =
       (env_table_node_t*)arena_alloc(table.arena, sizeof(env_table_node_t));
 
@@ -20,7 +19,7 @@ env_table_t env_table_add(env_table_t table, const char* key, name_id_t value) {
   return table;
 }
 
-name_id_t env_table_lookup(env_table_t table, const char* key) {
+int env_table_lookup(env_table_t table, const char* key) {
   env_table_node_t* nxt = table.head;
 
   while (nxt != NULL) {
@@ -32,7 +31,7 @@ name_id_t env_table_lookup(env_table_t table, const char* key) {
   return -1;
 }
 
-bool env_table_contains(env_table_t table, name_id_t value) {
+bool env_table_contains(env_table_t table, int value) {
   env_table_node_t* nxt = table.head;
 
   while (nxt != NULL) {

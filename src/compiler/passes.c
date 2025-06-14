@@ -74,7 +74,7 @@ static rco_pair_t rco_atom(program_tree_t* expr,
       }
   }
 
-  name_id_t id = g_names_cnt++;
+  int id = g_names_cnt++;
   bind_pair_t bind = {.name_id = id, .value_subtree = value};
   acc = vector_push_back(bind_pair_t, acc, bind);
 

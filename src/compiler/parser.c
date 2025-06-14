@@ -553,7 +553,7 @@ static program_tree_t* parse_let(env_table_t env, token_kind_t closing) {
   if (name_atom.kind != TK_ATOM)
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
-  name_id_t id = g_names_cnt++;
+  int id = g_names_cnt++;
   env_table_t local_env = env_table_add(env, name_atom.value.as_cstr, id);
 
   program_tree_t* bind_value = parse_expr(local_env, false);
@@ -607,9 +607,9 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
       {
         array_ptr_t captured = expr->value.as_lambda.captured;
         for (size_t i = 0; i < array_size(captured); i++) {
-          name_id_t id = array_data(name_id_t, captured)[i];
+          int id = array_data(int, captured)[i];
           if (!env_table_contains(env, id))
-            acc = vector_push_back(name_id_t, acc, id);
+            acc = vector_push_back(int, acc, id);
         }
 
         return acc;
@@ -632,9 +632,9 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
       }
     case PT_NAME:;
       {
-        name_id_t id = expr->value.as_name_id;
+        int id = expr->value.as_name_id;
         if (!env_table_contains(env, id))
-          acc = vector_push_back(name_id_t, acc, id);
+          acc = vector_push_back(int, acc, id);
         return acc;
       }
     case PT_VECTOR:
@@ -654,7 +654,7 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
          lambd_tk.value.as_special_atom == SPEC_LAMBDA);
 
   vector_ptr_t params_buf m_cleanup(vector_cleanup) =
-      vector_make(name_id_t, error_parser_buf);
+      vector_make(int, error_parser_buf);
 
   const token_t params_paren_o = parser_next_token_consume();
   if (!tk_is_paren_open(params_paren_o.kind))
@@ -665,17 +665,17 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
     if (nxt.kind != TK_ATOM)
       return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
-    name_id_t id = g_names_cnt++;
+    int id = g_names_cnt++;
     env = env_table_add(env, nxt.value.as_cstr, id);
-    params_buf = vector_push_back(name_id_t, params_buf, id);
+    params_buf = vector_push_back(int, params_buf, id);
 
     nxt = parser_next_token_consume();
   }
 
   size_t buf_sz = vector_size(params_buf);
 
-  array_ptr_t params = array_make_arena(name_id_t, g_pt_arena, buf_sz);
-  vector_copy_data(name_id_t, params_buf, array_baseptr(params));
+  array_ptr_t params = array_make_arena(int, g_pt_arena, buf_sz);
+  vector_copy_data(int, params_buf, array_baseptr(params));
 
   program_tree_t* body = parse_expr(env, false);
 
@@ -684,20 +684,19 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
   vector_ptr_t frees_buf m_cleanup(vector_cleanup) =
-      vector_make(name_id_t, error_parser_buf);
+      vector_make(int, error_parser_buf);
 
   arena_ptr_t lambda_env_arena m_cleanup(arena_cleanup) =
       arena_make(arena_size(env.arena), error_parser_env);
   env_table_t lambda_env = env_table_make(lambda_env_arena);
   for (size_t i = 0; i < array_size(params); i++)
-    lambda_env =
-        env_table_add(lambda_env, NULL, array_data(name_id_t, params)[i]);
+    lambda_env = env_table_add(lambda_env, NULL, array_data(int, params)[i]);
 
   frees_buf = collect_free(body, lambda_env, frees_buf);
 
   array_ptr_t captured =
-      array_make_arena(name_id_t, g_pt_arena, vector_size(frees_buf));
-  vector_copy_data(name_id_t, frees_buf, array_baseptr(captured));
+      array_make_arena(int, g_pt_arena, vector_size(frees_buf));
+  vector_copy_data(int, frees_buf, array_baseptr(captured));
 
   return pt_make_lambda(g_pt_arena, loc, params, captured, body);
 }
@@ -808,7 +807,7 @@ static program_tree_t* parse_expr(env_table_t env, bool is_toplevel) {
   if (tk.kind == TK_ATOM) {
     token_t atom_name = parser_next_token_consume();
 
-    name_id_t id = env_table_lookup(env, atom_name.value.as_cstr);
+    int id = env_table_lookup(env, atom_name.value.as_cstr);
     if (id == -1) {
       if (globals_table_contains(g_globals_table, atom_name.value.as_cstr))
         return pt_make_global(g_pt_arena, loc, atom_name.value.as_cstr);

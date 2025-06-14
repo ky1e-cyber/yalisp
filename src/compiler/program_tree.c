@@ -3,7 +3,6 @@
 #include "arena.h"
 #include "array.h"
 #include "program_tree.h"
-#include "shared.h"
 
 static program_tree_t* pt_make_node(arena_ptr_t pt_arena,
                                     loc_t loc,
@@ -69,7 +68,7 @@ program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
 
 program_tree_t* pt_make_name(arena_ptr_t pt_arena,
                              loc_t loc,
-                             name_id_t name_id) {
+                             int name_id) {
   return pt_make_node(pt_arena, loc, PT_NAME,
                       (pt_value_t){.as_name_id = name_id}, NULL);
 }
@@ -112,7 +111,8 @@ program_tree_t* pt_make_lambda(arena_ptr_t pt_arena,
                                array_ptr_t /* [name_id_t] */ captured,
                                program_tree_t* body) {
   return pt_make_node(pt_arena, loc, PT_LAMBDA,
-                      (pt_value_t){.as_lambda = {.params = params,
+                      (pt_value_t){.as_lambda = {.id = -1,
+                                                 .params = params,
                                                  .captured = captured,
                                                  .body_subtree = body}},
                       NULL);
@@ -204,9 +204,9 @@ static void fpprint_pt_lambda(FILE* stream, pt_lambda_t lambda) {
   size_t captured_sz = array_size(lambda.captured);
   if (captured_sz > 0) {
     for (size_t i = 0; i < captured_sz - 1; i++)
-      fprintf(stream, "$var%d ", array_data(name_id_t, lambda.captured)[i]);
+      fprintf(stream, "$var%d ", array_data(int, lambda.captured)[i]);
     fprintf(stream, "$var%d",
-            array_data(name_id_t, lambda.captured)[captured_sz - 1]);
+            array_data(int, lambda.captured)[captured_sz - 1]);
   }
   fprintf(stream, "]");
   fprintf(stream, "\\");
@@ -214,7 +214,7 @@ static void fpprint_pt_lambda(FILE* stream, pt_lambda_t lambda) {
   size_t params_sz = array_size(params);
 
   for (size_t i = 0; i < params_sz; i++) {
-    fprintf(stream, "$var%d ", array_data(name_id_t, params)[i]);
+    fprintf(stream, "$var%d ", array_data(int, params)[i]);
   }
 
   fprintf(stream, "-> ");
