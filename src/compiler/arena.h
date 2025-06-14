@@ -2,12 +2,10 @@
 #define H_ARENA
 
 #include <stdbool.h>
-#include "allocator.h"
 #include "defs.h"
 #include "macros.h"
 
 typedef struct __attribute__((aligned(MAX_ALIGNMENT))) {
-  const alloc_t allocator;
   void (*fail_callback)(void);
   size_t size;
   size_t pos;
@@ -15,7 +13,7 @@ typedef struct __attribute__((aligned(MAX_ALIGNMENT))) {
 
 typedef arena_header_t* arena_ptr_t;
 
-arena_ptr_t arena_make(size_t sz, alloc_t alloc, void (*fail_callback)(void));
+arena_ptr_t arena_make(size_t sz, void (*fail_callback)(void));
 
 void arena_release(arena_ptr_t arena);
 
@@ -29,10 +27,6 @@ m_macro_like void* arena_baseptr(arena_ptr_t arena) {
 
 m_macro_like size_t arena_size(arena_ptr_t arena) {
   return arena->size;
-}
-
-m_macro_like const alloc_t* arena_get_allocator(arena_ptr_t arena) {
-  return &arena->allocator;
 }
 
 m_macro_like bool arena_fits(arena_ptr_t arena, size_t sz) {

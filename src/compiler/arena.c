@@ -1,11 +1,12 @@
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include "arena.h"
 #include "defs.h"
 #include "memory.h"
 
-arena_ptr_t arena_make(size_t sz, alloc_t alloc, void (*fail_callback)(void)) {
-  arena_ptr_t arena = (arena_ptr_t)alloc.acquire(sizeof(arena_header_t) + sz);
+arena_ptr_t arena_make(size_t sz, void (*fail_callback)(void)) {
+  arena_ptr_t arena = (arena_ptr_t)malloc(sizeof(arena_header_t) + sz);
 
   if (arena == NULL) {
     fail_callback();
@@ -13,14 +14,14 @@ arena_ptr_t arena_make(size_t sz, alloc_t alloc, void (*fail_callback)(void)) {
   }
 
   arena_header_t header = {
-      .allocator = alloc, .fail_callback = fail_callback, .size = sz, .pos = 0};
+      .fail_callback = fail_callback, .size = sz, .pos = 0};
   memcpy(arena, &header, sizeof(arena_header_t));
 
   return arena;
 }
 
 void arena_release(arena_ptr_t arena) {
-  arena_get_allocator(arena)->release(arena);
+  free(arena);
 }
 
 void* arena_alloc(arena_ptr_t arena, size_t sz) {

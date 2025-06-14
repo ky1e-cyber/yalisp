@@ -2,7 +2,6 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "allocator.h"
 #include "arena.h"
 #include "array.h"
 #include "defs.h"
@@ -89,11 +88,8 @@ int main(int argc, char* argv[]) {
 
   const char* const src_path = argv[1];
 
-  arena_ptr_t str_arena m_cleanup(arena_cleanup) =
-      arena_make(1 << 20, alloc_default, error_arena_alloc);
-
   arena_ptr_t pt_arena m_cleanup(arena_cleanup) =
-      arena_make(1 << 20, alloc_default, error_arena_alloc);
+      arena_make(1 << 20, error_arena_alloc);
 
   shared_init(STR_ARENA_SIZE, PT_ARENA_SIZE, GLOBALS_ARENA_SIZE,
               ENV_ARENA_SIZE);

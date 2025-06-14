@@ -1,10 +1,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdnoreturn.h>
-#include "allocator.h"
 #include "arena.h"
-#include "defs.h"
-#include "env_table.h"
 #include "error.h"
 #include "globals_table.h"
 #include "shared.h"
@@ -41,17 +38,17 @@ void shared_init(size_t str_arena_size,
                  size_t pt_arena_size,
                  size_t globals_arena_size,
                  size_t env_arena_size) {
-  g_str_arena = arena_make(str_arena_size, alloc_default, error_str_arena);
-  g_pt_arena = arena_make(pt_arena_size, alloc_default, error_pt_arena);
+  g_str_arena = arena_make(str_arena_size, error_str_arena);
+  g_pt_arena = arena_make(pt_arena_size, error_pt_arena);
 
-  g_globals_table = globals_table_make(
-      arena_make(globals_arena_size, alloc_default, error_globals));
+  g_globals_table =
+      globals_table_make(arena_make(globals_arena_size, error_globals));
 
   for (size_t i = 0; i < g_stdlib_builtin_globals_sz; i++)
     g_globals_table =
         globals_table_add(g_globals_table, g_stdlib_builtin_globals[i]);
 
-  g_env_arena = arena_make(env_arena_size, alloc_default, error_env_arena);
+  g_env_arena = arena_make(env_arena_size, error_env_arena);
 }
 
 void shared_deinit() {

@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stdnoreturn.h>
-#include "allocator.h"
 #include "arena.h"
 #include "array.h"
 #include "error.h"
@@ -115,7 +114,7 @@ static vector_ptr_t atomize_seq(array_ptr_t /* [program_tree_t*] */ exprs,
 
 static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
   vector_ptr_t binds m_cleanup(vector_cleanup) =
-      vector_make(bind_pair_t, alloc_default, error_pass_buf);
+      vector_make(bind_pair_t, error_pass_buf);
 
   switch (expr->kind) {
     case PT_BOOL_LITERAL:

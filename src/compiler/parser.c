@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <stdnoreturn.h>
 #include <string.h>
-#include "allocator.h"
 #include "arena.h"
 #include "array.h"
 #include "env_table.h"
@@ -193,7 +192,7 @@ static token_t lexer_tokenize_atom() {
   loc_t loc = lexer_getloc();
 
   vector_ptr_t m_cleanup(vector_cleanup) buf =
-      vector_make(char, alloc_default, error_lexer_buf);
+      vector_make(char, error_lexer_buf);
 
   int c = lexer_next_char_peek();
   while (is_atompart(c)) {
@@ -264,7 +263,7 @@ static token_t lexer_tokenize_str() {
   loc_t loc = lexer_getloc();
 
   vector_ptr_t m_cleanup(vector_cleanup) buf =
-      vector_make(char, alloc_default, error_lexer_buf);
+      vector_make(char, error_lexer_buf);
 
   lexer_next_char_consume();  // consume '\"'
   int c = lexer_next_char_peek();
@@ -307,7 +306,7 @@ static token_t lexer_tokenize_hash_literal() {
   loc_t loc = lexer_getloc();
 
   vector_ptr_t buf m_cleanup(vector_cleanup) =
-      vector_make(char, alloc_default, error_lexer_buf);
+      vector_make(char, error_lexer_buf);
 
   lexer_next_char_consume();
   int c = lexer_next_char_peek();
@@ -469,7 +468,7 @@ static program_tree_t* parse_expr(env_table_t env, bool is_toplevel);
 static array_ptr_t /* [program_tree_t*] */
 parse_list_tail(env_table_t env, token_kind_t closing) {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
-      vector_make(program_tree_t*, alloc_default, error_parser_buf);
+      vector_make(program_tree_t*, error_parser_buf);
 
   token_t nxt_tk = parser_next_token_peek();
   while (nxt_tk.kind != closing) {
@@ -655,7 +654,7 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
          lambd_tk.value.as_special_atom == SPEC_LAMBDA);
 
   vector_ptr_t params_buf m_cleanup(vector_cleanup) =
-      vector_make(name_id_t, alloc_default, error_parser_buf);
+      vector_make(name_id_t, error_parser_buf);
 
   const token_t params_paren_o = parser_next_token_consume();
   if (!tk_is_paren_open(params_paren_o.kind))
@@ -685,10 +684,10 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
   vector_ptr_t frees_buf m_cleanup(vector_cleanup) =
-      vector_make(name_id_t, alloc_default, error_parser_buf);
+      vector_make(name_id_t, error_parser_buf);
 
   arena_ptr_t lambda_env_arena m_cleanup(arena_cleanup) =
-      arena_make(arena_size(env.arena), alloc_default, error_parser_env);
+      arena_make(arena_size(env.arena), error_parser_env);
   env_table_t lambda_env = env_table_make(lambda_env_arena);
   for (size_t i = 0; i < array_size(params); i++)
     lambda_env =
@@ -848,7 +847,7 @@ static program_tree_t* parse_expr(env_table_t env, bool is_toplevel) {
 
 static program_tree_t* parse_toplevel() {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
-      vector_make(program_tree_t*, alloc_default, error_parser_buf);
+      vector_make(program_tree_t*, error_parser_buf);
 
   env_table_t env = env_table_make(g_env_arena);
 

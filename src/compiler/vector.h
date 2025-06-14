@@ -3,12 +3,10 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include "allocator.h"
 #include "defs.h"
 #include "macros.h"
 
 typedef struct __attribute__((aligned(MAX_ALIGNMENT))) {
-  const alloc_t allocator;
   void (*fail_callback)(void);
   size_t capacity;
   size_t size;
@@ -27,15 +25,12 @@ m_macro_like size_t vector_bytesize_sized(size_t elem_sz, size_t cnt) {
     vector_bytesize_sized(sizeof(T), cnt__);    \
   })
 
-vector_ptr_t vector_make_sized(size_t elem_sz,
-                               alloc_t alloc,
-                               void (*fail_callback)(void));
+vector_ptr_t vector_make_sized(size_t elem_sz, void (*fail_callback)(void));
 
-#define vector_make(T, alloc, fail_callback) /* -> vector_ptr_t */ \
-  ({                                                               \
-    m_assert_istype(T);                                            \
-    alloc_t alloc__ = alloc;                                       \
-    vector_make_sized(sizeof(T), alloc__, fail_callback);          \
+#define vector_make(T, fail_callback) /* -> vector_ptr_t */ \
+  ({                                                        \
+    m_assert_istype(T);                                     \
+    vector_make_sized(sizeof(T), fail_callback);            \
   })
 
 void vector_release(vector_ptr_t vec);
@@ -54,10 +49,6 @@ m_macro_like size_t vector_capacity(vector_ptr_t vec) {
 
 m_macro_like void* vector_baseptr(vector_ptr_t vec) {
   return (void*)(vec + 1);
-}
-
-m_macro_like alloc_t vector_get_allocator(vector_ptr_t vec) {
-  return vec->allocator;
 }
 
 #define vector_data(T, vec) /* -> T* */ \
