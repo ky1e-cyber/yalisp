@@ -17,10 +17,6 @@ typedef struct {
 
 env_table_t env_table_make(arena_ptr_t arena);
 
-void env_table_release(env_table_t table);
-
-void env_table_cleanup(env_table_t* table);
-
 env_table_t env_table_add(env_table_t table, const char* key, name_id_t value);
 
 name_id_t env_table_lookup(env_table_t table, const char* key);

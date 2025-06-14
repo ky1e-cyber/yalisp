@@ -15,16 +15,20 @@
 #define VECTOR_GROW_FACTOR 2
 #endif
 
-#if !defined(PARSER_TREE_ARENA_SIZE)
-#define PARSER_TREE_ARENA_SIZE (1 << 20)
+#if !defined(PT_ARENA_SIZE)
+#define PT_ARENA_SIZE (1 << 20)
 #endif
 
-#if !defined(PARSER_ENV_ARENA_SIZE)
-#define PARSER_ENV_ARENA_SIZE (1 << 20)
+#if !defined(ENV_ARENA_SIZE)
+#define ENV_ARENA_SIZE (1 << 20)
 #endif
 
-#if !(defined(PARSER_GLOBALS_ARENA_SIZE))
-#define PARSER_GLOBALS_ARENA_SIZE (1 << 20)
+#if !defined(PARSER_GLOBALS_ARENA_SIZE)
+#define GLOBALS_ARENA_SIZE (1 << 20)
+#endif
+
+#if !defined(STR_ARENA_SIZE)
+#define STR_ARENA_SIZE (1 << 20)
 #endif
 
 #endif

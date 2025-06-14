@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include "arena.h"
 #include "program_tree.h"
 #include "token.h"
 
@@ -20,8 +19,6 @@ typedef struct {
   bool eos;
 } parser_state_t;
 
-program_tree_t* parse(const char* const path,
-                      arena_ptr_t pt_arena,
-                      arena_ptr_t str_arena);
+program_tree_t* parse(const char* const path);
 
 #endif

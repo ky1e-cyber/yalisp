@@ -6,14 +6,6 @@ globals_table_t globals_table_make(arena_ptr_t arena) {
   return (globals_table_t){.arena = arena, .head = NULL};
 }
 
-void globals_table_release(globals_table_t table) {
-  arena_release(table.arena);
-}
-
-void globals_table_cleanup(globals_table_t* table) {
-  globals_table_release(*table);
-}
-
 globals_table_t globals_table_add(globals_table_t table, const char* value) {
   globals_table_node_t* node = (globals_table_node_t*)arena_alloc(
       table.arena, sizeof(globals_table_node_t));

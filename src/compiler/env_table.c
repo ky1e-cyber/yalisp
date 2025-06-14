@@ -7,14 +7,6 @@ env_table_t env_table_make(arena_ptr_t arena) {
   return (env_table_t){.arena = arena, .head = NULL};
 }
 
-void env_table_release(env_table_t table) {
-  arena_release(table.arena);
-}
-
-void _envtable_cleanup(env_table_t* table) {
-  env_table_release(*table);
-}
-
 env_table_t env_table_add(env_table_t table, const char* key, name_id_t value) {
   env_table_node_t* node =
       (env_table_node_t*)arena_alloc(table.arena, sizeof(env_table_node_t));
