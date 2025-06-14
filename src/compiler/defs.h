@@ -23,4 +23,8 @@
 #define PARSER_ENV_ARENA_SIZE (1 << 20)
 #endif
 
+#if !(defined(PARSER_GLOBALS_ARENA_SIZE))
+#define PARSER_GLOBALS_ARENA_SIZE (1 << 20)
+#endif
+
 #endif

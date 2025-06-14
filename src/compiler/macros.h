@@ -4,6 +4,7 @@
 // Mostly taken from https://github.com/codr7/hacktical-c/tree/main/macro
 
 #include <stddef.h>
+#include "assert.h"
 
 #define m_id__(x, y) x##y
 

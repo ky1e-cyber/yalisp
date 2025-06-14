@@ -13,6 +13,7 @@
 #include "array.h"
 #include "env_table.h"
 #include "error.h"
+#include "globals_table.h"
 #include "macros.h"
 #include "parser.h"
 #include "program_tree.h"
@@ -57,6 +58,7 @@ static const char UNEXP_SPECIAL_ATOM_FMT[] =
     "Unexpected special atom encountered at %lu:%lu";
 
 static const char MALFORMED_FORM_FMT[] = "Malformed form at %lu:%lu";
+static const char UNDEFINED_NAME_FMT[] = "Undefined name at %lu:%lu";
 
 static bool is_whitespace(int c) {
   return (c == ' ' || c == '\t' || c == '\n');
@@ -418,6 +420,7 @@ static parser_state_t g_parser = {
 
 static void parser_deinit() {
   lexer_deinit();
+  globals_table_release(g_globals_table);
 }
 
 static token_t parser_next_token_peek() {
@@ -463,6 +466,8 @@ static void parser_init(const char* const src_path, arena_ptr_t str_arena) {
 
   token_t tk = lexer_next_token();
   g_parser = (parser_state_t){.current_token = tk, .eos = false};
+
+  fill_globals_table();
 }
 
 static program_tree_t* parse_expr(arena_ptr_t pt_arena,
@@ -797,9 +802,12 @@ static program_tree_t* parse_expr(arena_ptr_t pt_arena,
     token_t atom_name = parser_next_token_consume();
 
     name_id_t id = env_table_lookup(env, atom_name.value.as_cstr);
-    if (id == -1)
-      return pt_make_global(pt_arena, loc, atom_name.value.as_cstr);
+    if (id == -1) {
+      if (globals_table_contains(g_globals_table, atom_name.value.as_cstr))
+        return pt_make_global(pt_arena, loc, atom_name.value.as_cstr);
 
+      return pt_error_at(pt_arena, str_arena, loc, UNDEFINED_NAME_FMT);
+    }
     return pt_make_name(pt_arena, loc, id);
   }
 
