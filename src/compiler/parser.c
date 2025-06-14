@@ -57,14 +57,13 @@ static const char UNEXP_SPECIAL_ATOM_FMT[] =
     "Unexpected special atom encountered at %lu:%lu";
 
 static const char MALFORMED_FORM_FMT[] = "Malformed form at %lu:%lu";
-static const char UNDEFINED_NAME_FMT[] = "Undefined name at %lu:%lu";
 
-m_macro_like bool is_whitespace(int c) {
+static bool is_whitespace(int c) {
   return (c == ' ' || c == '\t' || c == '\n');
 }
 
-m_macro_like bool is_bracket(int c) {
-  static const int brackets[] = {'(', ')', '{', '}', '[', ']'};
+static bool is_bracket(int c) {
+  static const int brackets[] = {'(', ')', '[', ']'};
   return m_contains(c, brackets, sizeof(brackets) / sizeof(int));
 }
 
@@ -74,23 +73,23 @@ m_macro_like bool is_bracket(int c) {
 //          [ ATOM(foo), ROUND_PAREN_O, ATOM(bar), ROUND_PAREN_C ]
 // while in 'foo#bar' `#` can't be part of an atom
 //           therefore all expression must be tokenized as INVALID
-m_macro_like bool is_correcty_separating(int c) {
+static bool is_correcty_separating(int c) {
   return (c == EOF) || is_whitespace(c) || is_bracket(c);
 }
 
 // checks if c is a start of an atom
-m_macro_like bool is_atomstart(int c) {
-  static const int puncts[] = {'!', '$', '%', '&',  '*', '+', ',',
-                               '-', '.', '/', ':',  ';', '<', '=',
-                               '>', '?', '@', '\\', '^', '`', '|'};
+static bool is_atomstart(int c) {
+  static const int puncts[] = {'!', '$',  '%', '&', '*', '+', ',', '-',
+                               '.', '/',  ':', ';', '<', '=', '>', '?',
+                               '@', '\\', '^', '`', '|', '{', '}'};
   return isalpha(c) || (m_contains(c, puncts, sizeof(puncts) / sizeof(int)));
 }
 
-m_macro_like bool is_atompart(int c) {
+static bool is_atompart(int c) {
   return isdigit(c) || is_atomstart(c);
 }
 
-m_macro_like bool is_ded_literal_part(int c) {
+static bool is_ded_literal_part(int c) {
   return isalpha(c) || (c == '-');
 }
 
@@ -344,10 +343,10 @@ static token_t lexer_next_token() {
   assert(!g_lexer.eof &&
          "lexer_next_token_consume called after EOF encountered");
 
-  static const token_kind_t bracket_map[] = {
-      ['('] = TK_ROUND_PAREN_O, [')'] = TK_ROUND_PAREN_C,
-      ['{'] = TK_CURLY_PAREN_O, ['}'] = TK_CURLY_PAREN_C,
-      ['['] = TK_SQ_PAREN_O,    [']'] = TK_SQ_PAREN_C};
+  static const token_kind_t bracket_map[] = {['('] = TK_ROUND_PAREN_O,
+                                             [')'] = TK_ROUND_PAREN_C,
+                                             ['['] = TK_SQ_PAREN_O,
+                                             [']'] = TK_SQ_PAREN_C};
 
   int c = lexer_next_char_peek();
   while (is_whitespace(c)) {
@@ -446,6 +445,15 @@ static noreturn void error_parser_env() {
   error("Couldn't allocate env buffer for parser\n");
 }
 
+static bool tk_is_paren_open(token_kind_t kind) {
+  return kind == TK_ROUND_PAREN_O || kind == TK_SQ_PAREN_O;
+}
+
+static token_kind_t tk_closing_bracket(token_kind_t open) {
+  assert(tk_is_paren_open(open));
+  return open == TK_ROUND_PAREN_O ? TK_ROUND_PAREN_C : TK_SQ_PAREN_C;
+}
+
 void parser_deinit_defer__([[maybe_unused]] int* blank) {
   parser_deinit();
 }
@@ -462,12 +470,15 @@ static program_tree_t* parse_expr(arena_ptr_t pt_arena,
                                   table_t env);
 
 static array_ptr_t /* [program_tree_t*] */
-parse_list_tail(arena_ptr_t pt_arena, arena_ptr_t str_arena, table_t env) {
+parse_list_tail(arena_ptr_t pt_arena,
+                arena_ptr_t str_arena,
+                table_t env,
+                token_kind_t closing) {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
       vector_make(program_tree_t*, alloc_default, error_parser_buf);
 
   token_t nxt_tk = parser_next_token_peek();
-  while (nxt_tk.kind != TK_ROUND_PAREN_C) {
+  while (nxt_tk.kind != closing) {
     if (nxt_tk.kind == TK_EOS)
       return NULL;
 
@@ -476,8 +487,9 @@ parse_list_tail(arena_ptr_t pt_arena, arena_ptr_t str_arena, table_t env) {
 
     nxt_tk = parser_next_token_peek();
   }
+
   token_t paren_c = parser_next_token_consume();
-  assert(paren_c.kind == TK_ROUND_PAREN_C);
+  assert(paren_c.kind == closing);
 
   size_t args_sz = vector_size(buf);
 
@@ -489,7 +501,8 @@ parse_list_tail(arena_ptr_t pt_arena, arena_ptr_t str_arena, table_t env) {
 
 static program_tree_t* parse_binop(arena_ptr_t pt_arena,
                                    arena_ptr_t str_arena,
-                                   table_t env) {
+                                   table_t env,
+                                   token_kind_t closing) {
   token_t op_tk = parser_next_token_consume();
   loc_t loc = op_tk.loc;
 
@@ -508,7 +521,7 @@ static program_tree_t* parse_binop(arena_ptr_t pt_arena,
   program_tree_t* rhs = parse_expr(pt_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != TK_ROUND_PAREN_C)
+  if (paren_c.kind != closing)
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   return pt_make_binop(pt_arena, loc,
@@ -517,7 +530,8 @@ static program_tree_t* parse_binop(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_if(arena_ptr_t pt_arena,
                                 arena_ptr_t str_arena,
-                                table_t env) {
+                                table_t env,
+                                token_kind_t closing) {
   token_t if_tk = parser_next_token_consume();
   loc_t loc = if_tk.loc;
 
@@ -529,7 +543,7 @@ static program_tree_t* parse_if(arena_ptr_t pt_arena,
   program_tree_t* f_branch = parse_expr(pt_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != TK_ROUND_PAREN_C)
+  if (paren_c.kind != closing)
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   return pt_make_if(pt_arena, loc, cond, t_branch, f_branch);
@@ -537,7 +551,8 @@ static program_tree_t* parse_if(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_let(arena_ptr_t pt_arena,
                                  arena_ptr_t str_arena,
-                                 table_t env) {
+                                 table_t env,
+                                 token_kind_t closing) {
   token_t let = parser_next_token_consume();
   assert(let.kind == TK_SPECIAL_ATOM && let.value.as_special_atom == SPEC_LET);
 
@@ -545,7 +560,7 @@ static program_tree_t* parse_let(arena_ptr_t pt_arena,
 
   token_t paren_o = parser_next_token_peek();
 
-  if (paren_o.kind != TK_ROUND_PAREN_O)
+  if (!tk_is_paren_open(paren_o.kind))
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   parser_next_token_consume();
@@ -560,33 +575,18 @@ static program_tree_t* parse_let(arena_ptr_t pt_arena,
   program_tree_t* bind_value = parse_expr(pt_arena, str_arena, local_env);
 
   token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != TK_ROUND_PAREN_C)
+  if (paren_c.kind != tk_closing_bracket(paren_o.kind))
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   program_tree_t* expr = parse_expr(pt_arena, str_arena, local_env);
 
   token_t form_close = parser_next_token_consume();
-  if (form_close.kind != TK_ROUND_PAREN_C)
+  if (form_close.kind != closing)
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   return pt_make_let(pt_arena, loc,
                      (bind_pair_t){.name_id = id, .value_subtree = bind_value},
                      expr);
-}
-
-static program_tree_t* parse_vector(arena_ptr_t pt_arena,
-                                    arena_ptr_t str_arena,
-                                    table_t env) {
-  token_t vector_tk = parser_next_token_consume();
-  loc_t loc = vector_tk.loc;
-  assert(vector_tk.kind == TK_SPECIAL_ATOM &&
-         vector_tk.value.as_special_atom == SPEC_VECTOR);
-
-  array_ptr_t elems = parse_list_tail(pt_arena, str_arena, env);
-  if (elems == NULL)
-    return pt_error_at(pt_arena, str_arena, loc, UNCLOSED_LIST_ERR_FMT);
-
-  return pt_make_vector(pt_arena, loc, elems);
 }
 
 static vector_ptr_t collect_free(const program_tree_t* expr,
@@ -608,6 +608,7 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
     case PT_BOOL_LITERAL:
     case PT_INT_LITERAL:
     case PT_STR_LITERAL:
+    case PT_GLOBAL_SYMBOL:
     case PT_ERROR:
       return acc;
     case PT_LET:;
@@ -664,24 +665,22 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
 
 static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
                                     arena_ptr_t str_arena,
-                                    table_t env) {
+                                    table_t env,
+                                    token_kind_t closing) {
   token_t lambd_tk = parser_next_token_consume();
   loc_t loc = lambd_tk.loc;
   assert(lambd_tk.kind == TK_SPECIAL_ATOM &&
          lambd_tk.value.as_special_atom == SPEC_LAMBDA);
 
-  // vector_ptr_t local_env m_cleanup(vector_cleanup) =
-  // vector_copy(assoc_pair_t, env);
-
   vector_ptr_t params_buf m_cleanup(vector_cleanup) =
       vector_make(name_id_t, alloc_default, error_parser_buf);
 
-  token_t paren_o = parser_next_token_consume();
-  if (paren_o.kind != TK_ROUND_PAREN_O)
+  const token_t params_paren_o = parser_next_token_consume();
+  if (!tk_is_paren_open(params_paren_o.kind))
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   token_t nxt = parser_next_token_consume();
-  while (nxt.kind != TK_ROUND_PAREN_C) {
+  while (nxt.kind != tk_closing_bracket(params_paren_o.kind)) {
     if (nxt.kind != TK_ATOM)
       return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
@@ -700,7 +699,7 @@ static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
   program_tree_t* body = parse_expr(pt_arena, str_arena, env);
 
   token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != TK_ROUND_PAREN_C)
+  if (paren_c.kind != closing)
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   vector_ptr_t frees_buf m_cleanup(vector_cleanup) =
@@ -721,12 +720,31 @@ static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
   return pt_make_lambda(pt_arena, loc, params, captured, body);
 }
 
+static program_tree_t* parse_vector(arena_ptr_t pt_arena,
+                                    arena_ptr_t str_arena,
+                                    table_t env,
+                                    token_kind_t closing) {
+  token_t vec_tk = parser_next_token_consume();
+  loc_t loc = vec_tk.loc;
+
+  assert(vec_tk.kind == TK_SPECIAL_ATOM &&
+         vec_tk.value.as_special_atom == SPEC_VECTOR);
+
+  array_ptr_t elems = parse_list_tail(pt_arena, str_arena, env, closing);
+  if (elems == NULL)
+    return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
+
+  return pt_make_vector(pt_arena, loc, elems);
+}
+
 static program_tree_t* parse_list(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
                                   table_t env) {
   token_t paren_o = parser_next_token_consume();
   loc_t loc = paren_o.loc;
-  assert(paren_o.kind == TK_ROUND_PAREN_O);
+  assert(tk_is_paren_open(paren_o.kind));
+
+  token_kind_t closing = tk_closing_bracket(paren_o.kind);
 
   token_t fst = parser_next_token_peek();
 
@@ -734,20 +752,20 @@ static program_tree_t* parse_list(arena_ptr_t pt_arena,
     special_atom_t spec = fst.value.as_special_atom;
 
     if (spec == SPEC_LET)
-      return parse_let(pt_arena, str_arena, env);
+      return parse_let(pt_arena, str_arena, env, closing);
 
     if (spec == SPEC_IF)
-      return parse_if(pt_arena, str_arena, env);
+      return parse_if(pt_arena, str_arena, env, closing);
 
     if (spec == SPEC_LAMBDA)
-      return parse_lambda(pt_arena, str_arena, env);
+      return parse_lambda(pt_arena, str_arena, env, closing);
 
     if (spec == SPEC_VECTOR)
-      return parse_vector(pt_arena, str_arena, env);
+      return parse_vector(pt_arena, str_arena, env, closing);
 
     if (m_contains(spec, spec_binops,
                    sizeof(spec_binops) / sizeof(special_atom_t))) {
-      return parse_binop(pt_arena, str_arena, env);
+      return parse_binop(pt_arena, str_arena, env, closing);
     }
 
     parser_next_token_consume();
@@ -756,7 +774,7 @@ static program_tree_t* parse_list(arena_ptr_t pt_arena,
 
   program_tree_t* fn = parse_expr(pt_arena, str_arena, env);
 
-  array_ptr_t args = parse_list_tail(pt_arena, str_arena, env);
+  array_ptr_t args = parse_list_tail(pt_arena, str_arena, env, closing);
   if (args == NULL)
     return pt_error_at(pt_arena, str_arena, loc, UNCLOSED_LIST_ERR_FMT);
 
@@ -776,16 +794,16 @@ static program_tree_t* parse_expr(arena_ptr_t pt_arena,
 
   if (tk.kind == TK_ATOM) {
     token_t atom_name = parser_next_token_consume();
+
     name_id_t id = table_lookup(env, atom_name.value.as_cstr);
     if (id == -1)
-      return pt_error_at(pt_arena, str_arena, loc, UNDEFINED_NAME_FMT);
+      return pt_make_global(pt_arena, loc, atom_name.value.as_cstr);
 
     return pt_make_name(pt_arena, loc, id);
   }
 
-  if (tk.kind == TK_ROUND_PAREN_O) {
+  if (tk_is_paren_open(tk.kind))
     return parse_list(pt_arena, str_arena, env);
-  }
 
   if (tk.kind == TK_BOOL_LITERAL) {
     parser_next_token_consume();

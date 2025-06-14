@@ -14,11 +14,6 @@ static noreturn void error_pass_buf() {
   error("Couldn't allocate buffer for transformation passes\n");
 }
 
-typedef struct {
-  vector_ptr_t /* [bind_pair_t] */ mappings;
-  program_tree_t* atomic_pt;
-} rco_pair_t;
-
 static bool is_atomic(program_tree_t* expr) {
   static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL,
                                       PT_STR_LITERAL, PT_NAME};
@@ -26,6 +21,11 @@ static bool is_atomic(program_tree_t* expr) {
 }
 
 static program_tree_t* to_mnf_expr(program_tree_t* pt, arena_ptr_t pt_arena);
+
+typedef struct {
+  vector_ptr_t /* [bind_pair_t] */ mappings;
+  program_tree_t* atomic_pt;
+} rco_pair_t;
 
 static rco_pair_t rco_atom(program_tree_t* expr,
                            arena_ptr_t pt_arena,
@@ -36,6 +36,7 @@ static rco_pair_t rco_atom(program_tree_t* expr,
     case PT_INT_LITERAL:
     case PT_STR_LITERAL:
     case PT_NAME:
+    case PT_GLOBAL_SYMBOL:
       return (rco_pair_t){.atomic_pt = expr, .mappings = acc};
     case PT_LAMBDA:;
       {
@@ -113,11 +114,15 @@ static vector_ptr_t atomize_seq(array_ptr_t /* [program_tree_t*] */ exprs,
 }
 
 static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
+  vector_ptr_t binds m_cleanup(vector_cleanup) =
+      vector_make(bind_pair_t, alloc_default, error_pass_buf);
+
   switch (expr->kind) {
     case PT_BOOL_LITERAL:
     case PT_INT_LITERAL:
     case PT_STR_LITERAL:
     case PT_NAME:
+    case PT_GLOBAL_SYMBOL:
       return expr;
     case PT_LAMBDA:;
       {
@@ -137,9 +142,6 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
       }
     case PT_CALL:;
       {
-        vector_ptr_t binds m_cleanup(vector_cleanup) =
-            vector_make(bind_pair_t, alloc_default, error_pass_buf);
-
         rco_pair_t rco_fn =
             rco_atom(expr->value.as_call.fn_subtree, pt_arena, binds);
         binds = rco_fn.mappings;
@@ -151,16 +153,11 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
       }
     case PT_VECTOR:;
       {
-        vector_ptr_t binds m_cleanup(vector_cleanup) =
-            vector_make(bind_pair_t, alloc_default, error_pass_buf);
         binds = atomize_seq(expr->value.as_subtree_list, pt_arena, binds);
-
         return unfold_binds(expr, binds, pt_arena);
       }
     case PT_BINOP:;
       {
-        vector_ptr_t binds m_cleanup(vector_cleanup) =
-            vector_make(bind_pair_t, alloc_default, error_pass_buf);
         program_tree_t* lhs = expr->value.as_binop.lhs;
         program_tree_t* rhs = expr->value.as_binop.rhs;
 
@@ -176,8 +173,6 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr, arena_ptr_t pt_arena) {
       }
     case PT_IF:;
       {
-        vector_ptr_t binds m_cleanup(vector_cleanup) =
-            vector_make(bind_pair_t, alloc_default, error_pass_buf);
         rco_pair_t rco_cond =
             rco_atom(expr->value.as_if_form.cond_subtree, pt_arena, binds);
         binds = rco_cond.mappings;

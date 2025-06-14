@@ -1,3 +1,4 @@
+#include "arena.h"
 #if !defined(H_PROGRAM_TREE)
 #define H_PROGRAM_TREE
 
@@ -69,6 +70,7 @@ typedef enum {
   PT_IF,
   PT_LAMBDA,
   PT_CALL,
+  PT_GLOBAL_SYMBOL,
   PT_VECTOR,
 } pt_kind_t;
 
@@ -147,6 +149,10 @@ program_tree_t* pt_make_call(arena_ptr_t pt_arena,
                              loc_t loc,
                              program_tree_t* fn,
                              array_ptr_t /* [program_tree_t*] */ args);
+
+program_tree_t* pt_make_global(arena_ptr_t pt_arena,
+                               loc_t loc,
+                               const char* symbol);
 
 program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                                loc_t loc,

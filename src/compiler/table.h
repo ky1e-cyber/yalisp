@@ -1,11 +1,12 @@
 #if !defined(H_TABLE)
 #define H_TABLE
 
+#include "shared.h"
 #include "arena.h"
 
 typedef struct tablenode_t_ {
   const char* key;
-  int value;
+  name_id_t value;
   struct tablenode_t_* next;
 } tablenode_t;
 
@@ -20,10 +21,10 @@ void table_release(table_t table);
 
 void table_cleanup(table_t* table);
 
-table_t table_add(table_t table, const char* key, int value);
+table_t table_add(table_t table, const char* key, name_id_t value);
 
-int table_lookup(table_t table, const char* key);
+name_id_t table_lookup(table_t table, const char* key);
 
-bool table_contains(table_t table, int value);
+bool table_contains(table_t table, name_id_t value);
 
 #endif

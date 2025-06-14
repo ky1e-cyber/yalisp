@@ -1,5 +1,6 @@
 #include <string.h>
 #include "arena.h"
+#include "shared.h"
 #include "table.h"
 
 table_t table_make(arena_ptr_t arena) {
@@ -14,7 +15,7 @@ void table_cleanup(table_t* table) {
   table_release(*table);
 }
 
-table_t table_add(table_t table, const char* key, int value) {
+table_t table_add(table_t table, const char* key, name_id_t value) {
   tablenode_t* node =
       (tablenode_t*)arena_alloc(table.arena, sizeof(tablenode_t));
 
@@ -27,7 +28,7 @@ table_t table_add(table_t table, const char* key, int value) {
   return table;
 }
 
-int table_lookup(table_t table, const char* key) {
+name_id_t table_lookup(table_t table, const char* key) {
   tablenode_t* nxt = table.head;
 
   while (nxt != NULL) {
@@ -39,7 +40,7 @@ int table_lookup(table_t table, const char* key) {
   return -1;
 }
 
-bool table_contains(table_t table, int value) {
+bool table_contains(table_t table, name_id_t value) {
   tablenode_t* nxt = table.head;
 
   while (nxt != NULL) {

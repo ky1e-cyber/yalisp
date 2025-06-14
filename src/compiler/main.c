@@ -31,30 +31,25 @@ static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt) {
     case PT_INT_LITERAL:
     case PT_STR_LITERAL:
     case PT_NAME:
+    case PT_GLOBAL_SYMBOL:
       return cnt;
     case PT_LAMBDA:
       return dump_parser_errors_and_die_tail(pt->value.as_lambda.body_subtree,
                                              cnt);
-    case PT_LET:;
-      {
-        return cnt +
-               dump_parser_errors_and_die_tail(
-                   pt->value.as_let_form.bind.value_subtree, 0) +
-               dump_parser_errors_and_die_tail(
-                   pt->value.as_let_form.expr_subtree, 0);
-      }
-    case PT_BINOP:;
-      {
-        return cnt +
-               dump_parser_errors_and_die_tail(pt->value.as_binop.lhs, cnt) +
-               dump_parser_errors_and_die_tail(pt->value.as_binop.rhs, 0);
-      }
-    case PT_CALL:;
-      {
-        cnt += dump_parser_errors_and_die_tail(pt->value.as_call.fn_subtree, 0);
-        return dump_parser_errors_and_die_seq(pt->value.as_call.args_subtrees,
-                                              cnt);
-      }
+    case PT_LET:
+      return cnt +
+             dump_parser_errors_and_die_tail(
+                 pt->value.as_let_form.bind.value_subtree, 0) +
+             dump_parser_errors_and_die_tail(pt->value.as_let_form.expr_subtree,
+                                             0);
+    case PT_BINOP:
+      return cnt + dump_parser_errors_and_die_tail(pt->value.as_binop.lhs, 0) +
+             dump_parser_errors_and_die_tail(pt->value.as_binop.rhs, 0);
+
+    case PT_CALL:
+      return cnt +
+             dump_parser_errors_and_die_tail(pt->value.as_call.fn_subtree, 0) +
+             dump_parser_errors_and_die_seq(pt->value.as_call.args_subtrees, 0);
     case PT_IF:;
       {
         return cnt +
