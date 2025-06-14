@@ -11,12 +11,12 @@
 #include "allocator.h"
 #include "arena.h"
 #include "array.h"
+#include "env_table.h"
 #include "error.h"
 #include "macros.h"
 #include "parser.h"
 #include "program_tree.h"
 #include "shared.h"
-#include "table.h"
 #include "token.h"
 #include "vector.h"
 
@@ -467,12 +467,12 @@ static void parser_init(const char* const src_path, arena_ptr_t str_arena) {
 
 static program_tree_t* parse_expr(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
-                                  table_t env);
+                                  env_table_t env);
 
 static array_ptr_t /* [program_tree_t*] */
 parse_list_tail(arena_ptr_t pt_arena,
                 arena_ptr_t str_arena,
-                table_t env,
+                env_table_t env,
                 token_kind_t closing) {
   vector_ptr_t buf m_cleanup(vector_cleanup) =
       vector_make(program_tree_t*, alloc_default, error_parser_buf);
@@ -501,7 +501,7 @@ parse_list_tail(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_binop(arena_ptr_t pt_arena,
                                    arena_ptr_t str_arena,
-                                   table_t env,
+                                   env_table_t env,
                                    token_kind_t closing) {
   token_t op_tk = parser_next_token_consume();
   loc_t loc = op_tk.loc;
@@ -530,7 +530,7 @@ static program_tree_t* parse_binop(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_if(arena_ptr_t pt_arena,
                                 arena_ptr_t str_arena,
-                                table_t env,
+                                env_table_t env,
                                 token_kind_t closing) {
   token_t if_tk = parser_next_token_consume();
   loc_t loc = if_tk.loc;
@@ -551,7 +551,7 @@ static program_tree_t* parse_if(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_let(arena_ptr_t pt_arena,
                                  arena_ptr_t str_arena,
-                                 table_t env,
+                                 env_table_t env,
                                  token_kind_t closing) {
   token_t let = parser_next_token_consume();
   assert(let.kind == TK_SPECIAL_ATOM && let.value.as_special_atom == SPEC_LET);
@@ -570,7 +570,7 @@ static program_tree_t* parse_let(arena_ptr_t pt_arena,
     return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
   name_id_t id = g_names_cnt++;
-  table_t local_env = table_add(env, name_atom.value.as_cstr, id);
+  env_table_t local_env = env_table_add(env, name_atom.value.as_cstr, id);
 
   program_tree_t* bind_value = parse_expr(pt_arena, str_arena, local_env);
 
@@ -590,11 +590,11 @@ static program_tree_t* parse_let(arena_ptr_t pt_arena,
 }
 
 static vector_ptr_t collect_free(const program_tree_t* expr,
-                                 table_t env,
+                                 env_table_t env,
                                  vector_ptr_t acc);
 
 static vector_ptr_t collect_free_seq(array_ptr_t /* [program_tree_t*] */ exprs,
-                                     table_t env,
+                                     env_table_t env,
                                      vector_ptr_t acc) {
   for (size_t i = 0; i < array_size(exprs); i++)
     acc = collect_free(array_data(program_tree_t*, exprs)[i], env, acc);
@@ -602,7 +602,7 @@ static vector_ptr_t collect_free_seq(array_ptr_t /* [program_tree_t*] */ exprs,
 }
 
 static vector_ptr_t collect_free(const program_tree_t* expr,
-                                 table_t env,
+                                 env_table_t env,
                                  vector_ptr_t acc) {
   switch (expr->kind) {
     case PT_BOOL_LITERAL:
@@ -614,7 +614,7 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
     case PT_LET:;
       {
         pt_let_form_t let = expr->value.as_let_form;
-        env = table_add(env, NULL, let.bind.name_id);
+        env = env_table_add(env, NULL, let.bind.name_id);
         acc =
             collect_free(expr->value.as_let_form.bind.value_subtree, env, acc);
         return collect_free(expr->value.as_let_form.expr_subtree, env, acc);
@@ -624,7 +624,7 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
         array_ptr_t captured = expr->value.as_lambda.captured;
         for (size_t i = 0; i < array_size(captured); i++) {
           name_id_t id = array_data(name_id_t, captured)[i];
-          if (!table_contains(env, id))
+          if (!env_table_contains(env, id))
             acc = vector_push_back(name_id_t, acc, id);
         }
 
@@ -649,7 +649,7 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
     case PT_NAME:;
       {
         name_id_t id = expr->value.as_name_id;
-        if (!table_contains(env, id))
+        if (!env_table_contains(env, id))
           acc = vector_push_back(name_id_t, acc, id);
         return acc;
       }
@@ -665,7 +665,7 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
 
 static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
                                     arena_ptr_t str_arena,
-                                    table_t env,
+                                    env_table_t env,
                                     token_kind_t closing) {
   token_t lambd_tk = parser_next_token_consume();
   loc_t loc = lambd_tk.loc;
@@ -685,7 +685,7 @@ static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
       return pt_error_at(pt_arena, str_arena, loc, MALFORMED_FORM_FMT);
 
     name_id_t id = g_names_cnt++;
-    env = table_add(env, nxt.value.as_cstr, id);
+    env = env_table_add(env, nxt.value.as_cstr, id);
     params_buf = vector_push_back(name_id_t, params_buf, id);
 
     nxt = parser_next_token_consume();
@@ -707,9 +707,10 @@ static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
 
   arena_ptr_t lambda_env_arena m_cleanup(arena_cleanup) =
       arena_make(arena_size(env.arena), alloc_default, error_parser_env);
-  table_t lambda_env = table_make(lambda_env_arena);
+  env_table_t lambda_env = env_table_make(lambda_env_arena);
   for (size_t i = 0; i < array_size(params); i++)
-    lambda_env = table_add(lambda_env, NULL, array_data(name_id_t, params)[i]);
+    lambda_env =
+        env_table_add(lambda_env, NULL, array_data(name_id_t, params)[i]);
 
   frees_buf = collect_free(body, lambda_env, frees_buf);
 
@@ -722,7 +723,7 @@ static program_tree_t* parse_lambda(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_vector(arena_ptr_t pt_arena,
                                     arena_ptr_t str_arena,
-                                    table_t env,
+                                    env_table_t env,
                                     token_kind_t closing) {
   token_t vec_tk = parser_next_token_consume();
   loc_t loc = vec_tk.loc;
@@ -739,7 +740,7 @@ static program_tree_t* parse_vector(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_list(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
-                                  table_t env) {
+                                  env_table_t env) {
   token_t paren_o = parser_next_token_consume();
   loc_t loc = paren_o.loc;
   assert(tk_is_paren_open(paren_o.kind));
@@ -783,7 +784,7 @@ static program_tree_t* parse_list(arena_ptr_t pt_arena,
 
 static program_tree_t* parse_expr(arena_ptr_t pt_arena,
                                   arena_ptr_t str_arena,
-                                  table_t env) {
+                                  env_table_t env) {
   token_t tk = parser_next_token_peek();
   loc_t loc = tk.loc;
 
@@ -795,7 +796,7 @@ static program_tree_t* parse_expr(arena_ptr_t pt_arena,
   if (tk.kind == TK_ATOM) {
     token_t atom_name = parser_next_token_consume();
 
-    name_id_t id = table_lookup(env, atom_name.value.as_cstr);
+    name_id_t id = env_table_lookup(env, atom_name.value.as_cstr);
     if (id == -1)
       return pt_make_global(pt_arena, loc, atom_name.value.as_cstr);
 
@@ -836,7 +837,7 @@ static program_tree_t* parse_toplevel(arena_ptr_t pt_arena,
 
   arena_ptr_t env_arena m_cleanup(arena_cleanup) =
       arena_make(g_parser_env_arena_size, alloc_default, error_parser_env);
-  table_t env = table_make(env_arena);
+  env_table_t env = env_table_make(env_arena);
 
   token_t nxt = parser_next_token_peek();
 
