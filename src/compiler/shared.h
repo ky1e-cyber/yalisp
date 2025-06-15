@@ -14,7 +14,7 @@ extern size_t g_globals_arena_size;
 extern size_t g_str_arena_size;
 
 extern const char* g_stdlib_builtin_globals[];
-extern size_t g_stdlib_builtin_globals_sz;
+extern const size_t g_stdlib_builtin_globals_sz;
 
 extern arena_ptr_t g_str_arena;
 extern arena_ptr_t g_pt_arena;

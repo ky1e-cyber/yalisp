@@ -38,6 +38,13 @@ typedef struct {
   program_tree_t* body_subtree;
 } pt_lambda_t;
 
+typedef enum { UNARY_NOT = 0, UNARY_COUNT__ } uop_t;
+
+typedef struct {
+  uop_t op;
+  program_tree_t* operand;
+} pt_uop_t;
+
 typedef enum {
   BINOP_SUM = 0,
   BINOP_SUB,
@@ -47,6 +54,8 @@ typedef enum {
   BINOP_LT,
   BINOP_GE,
   BINOP_GT,
+  BINOP_AND,
+  BINOP_OR,
   BINOP_EQ,
   BINOP_NEQ,
   BINOP_COUNT__
@@ -65,6 +74,7 @@ typedef enum {
   PT_INT_LITERAL,
   PT_STR_LITERAL,
   PT_NAME,
+  PT_UOP,
   PT_BINOP,
   PT_LET,
   PT_IF,
@@ -82,6 +92,7 @@ typedef union {
   int as_name_id;
   program_tree_t* as_subtree;
   pt_binop_t as_binop;
+  pt_uop_t as_uop;
   pt_call_t as_call;
   pt_let_form_t as_let_form;
   pt_if_form_t as_if_form;
@@ -118,15 +129,18 @@ program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
                                        loc_t loc,
                                        const char* value);
 
-program_tree_t* pt_make_name(arena_ptr_t pt_arena,
-                             loc_t loc,
-                             int name_id);
+program_tree_t* pt_make_name(arena_ptr_t pt_arena, loc_t loc, int name_id);
 
 program_tree_t* pt_make_binop(arena_ptr_t pt_arena,
                               loc_t loc,
                               binop_t op,
                               program_tree_t* lhs,
                               program_tree_t* rhs);
+
+program_tree_t* pt_make_uop(arena_ptr_t pt_arena,
+                            loc_t loc,
+                            uop_t op,
+                            program_tree_t* operand);
 
 program_tree_t* pt_make_let(arena_ptr_t pt_arena,
                             loc_t loc,

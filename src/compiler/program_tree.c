@@ -66,11 +66,18 @@ program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
                       (pt_value_t){.as_cstr = value}, NULL);
 }
 
-program_tree_t* pt_make_name(arena_ptr_t pt_arena,
-                             loc_t loc,
-                             int name_id) {
+program_tree_t* pt_make_name(arena_ptr_t pt_arena, loc_t loc, int name_id) {
   return pt_make_node(pt_arena, loc, PT_NAME,
                       (pt_value_t){.as_name_id = name_id}, NULL);
+}
+
+program_tree_t* pt_make_uop(arena_ptr_t pt_arena,
+                            loc_t loc,
+                            uop_t op,
+                            program_tree_t* operand) {
+  return pt_make_node(pt_arena, loc, PT_UOP,
+                      (pt_value_t){.as_uop = {.operand = operand, .op = op}},
+                      NULL);
 }
 
 program_tree_t* pt_make_binop(arena_ptr_t pt_arena,
@@ -184,6 +191,22 @@ static const char* binop_repr(binop_t op) {
   return reprs[op];
 }
 
+static const char* uop_repr(uop_t op) {
+  static const char* reprs[] = {[UNARY_NOT] = "not"};
+
+  static_assert(sizeof(reprs) / sizeof(char*) == UNARY_COUNT__,
+                "Some uops missing representations");
+
+  return reprs[op];
+}
+
+static void fpprint_pt_uop(FILE* stream, pt_uop_t uop) {
+  fprintf(stream, "(");
+  fprintf(stream, "OP(%s) ", uop_repr(uop.op));
+  fpprint_pt(stream, uop.operand);
+  fprintf(stream, ")");
+}
+
 static void fpprint_pt_binop(FILE* stream, pt_binop_t binop) {
   fprintf(stream, "(OP(%s) ", binop_repr(binop.op));
   fpprint_pt(stream, binop.lhs);
@@ -259,6 +282,11 @@ void fpprint_pt(FILE* stream, program_tree_t* pt) {
     case PT_NAME:;
       {
         fprintf(stream, "$var%d", pt->value.as_name_id);
+        break;
+      }
+    case PT_UOP:;
+      {
+        fpprint_pt_uop(stream, pt->value.as_uop);
         break;
       }
     case PT_BINOP:

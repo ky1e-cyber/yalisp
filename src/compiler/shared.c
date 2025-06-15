@@ -11,8 +11,10 @@
 #include "shared.h"
 #include "vector.h"
 
-const char* g_stdlib_builtin_globals[] = {"vector-ref", "vector-length"};
-size_t g_stdlib_builtin_globals_sz = sizeof(g_globals_table) / sizeof(char*);
+const char* g_stdlib_builtin_globals[] = {"print", "println", "read-int",
+                                          "vector-ref", "vector-length"};
+const size_t g_stdlib_builtin_globals_sz =
+    sizeof(g_stdlib_builtin_globals) / sizeof(char*);
 
 int g_names_cnt = 0;
 
@@ -94,6 +96,8 @@ static vector_ptr_t register_lambdas_rec(program_tree_t* pt, vector_ptr_t acc) {
             register_lambdas_rec(pt->value.as_let_form.bind.value_subtree, acc);
         return register_lambdas_rec(pt->value.as_let_form.expr_subtree, acc);
       }
+    case PT_UOP:
+      return register_lambdas_rec(pt->value.as_uop.operand, acc);
     case PT_BINOP:;
       {
         acc = register_lambdas_rec(pt->value.as_binop.lhs, acc);

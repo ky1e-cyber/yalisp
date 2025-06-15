@@ -9,7 +9,106 @@
 #include "vector.h"
 
 static noreturn void error_pass_buf() {
-  error("Couldn't allocate buffer for transformation passes\n");
+  error("Allocation failure in buffer for transformation passes\n");
+}
+
+program_tree_t* register_lambdas_pass(program_tree_t* pt_toplevel) {
+  register_lambdas(pt_toplevel);
+  return pt_toplevel;
+}
+
+static program_tree_t* shrink_rec(program_tree_t* pt);
+
+static void shrink_seq(array_ptr_t /* [program_tree_t*] */ subtrees) {
+  for (size_t i = 0; i < array_size(subtrees); i++)
+    array_data(program_tree_t*, subtrees)[i] =
+        shrink_rec(array_data(program_tree_t*, subtrees)[i]);
+}
+
+static program_tree_t* shrink_rec(program_tree_t* pt) {
+  switch (pt->kind) {
+    case PT_ERROR:
+    case PT_BOOL_LITERAL:
+    case PT_INT_LITERAL:
+    case PT_STR_LITERAL:
+    case PT_NAME:
+    case PT_GLOBAL_SYMBOL:
+      return pt;
+    case PT_UOP:;
+      {
+        pt->value.as_uop.operand = shrink_rec(pt->value.as_uop.operand);
+        return pt;
+      }
+    case PT_LET:;
+      {
+        program_tree_t* bind_val = pt->value.as_let_form.bind.value_subtree;
+        program_tree_t* val = pt->value.as_let_form.expr_subtree;
+
+        pt->value.as_let_form.bind.value_subtree = shrink_rec(bind_val);
+        pt->value.as_let_form.expr_subtree = shrink_rec(val);
+
+        return pt;
+      }
+    case PT_LAMBDA:;
+      {
+        pt->value.as_lambda.body_subtree =
+            shrink_rec(pt->value.as_lambda.body_subtree);
+
+        return pt;
+      }
+    case PT_CALL:;
+      {
+        pt->value.as_call.fn_subtree = shrink_rec(pt->value.as_call.fn_subtree);
+        shrink_seq(pt->value.as_call.args_subtrees);
+        return pt;
+      }
+    case PT_IF:;
+      {
+        pt->value.as_if_form.cond_subtree =
+            shrink_rec(pt->value.as_if_form.cond_subtree);
+        pt->value.as_if_form.t_branch_subtree =
+            shrink_rec(pt->value.as_if_form.t_branch_subtree);
+        pt->value.as_if_form.f_branch_subtree =
+            shrink_rec(pt->value.as_if_form.f_branch_subtree);
+        return pt;
+      }
+    case PT_VECTOR:
+    case PT_TOPLEVEL:;
+      {
+        shrink_seq(pt->value.as_subtree_list);
+        return pt;
+      }
+    case PT_BINOP: {
+      pt->value.as_binop.lhs = shrink_rec(pt->value.as_binop.lhs);
+      pt->value.as_binop.rhs = shrink_rec(pt->value.as_binop.rhs);
+
+      binop_t op = pt->value.as_binop.op;
+      program_tree_t* lhs = pt->value.as_binop.lhs;
+      program_tree_t* rhs = pt->value.as_binop.rhs;
+
+      switch (op) {
+        case BINOP_AND:
+          return pt_make_if(g_pt_arena, (loc_t){}, lhs, rhs,
+                            pt_make_bool_literal(g_pt_arena, (loc_t){}, false));
+
+        case BINOP_OR:
+          return pt_make_if(g_pt_arena, (loc_t){}, lhs,
+                            pt_make_bool_literal(g_pt_arena, (loc_t){}, true),
+                            rhs);
+
+        default:
+          break;
+      }
+
+      return pt;
+    }
+  }
+}
+
+program_tree_t* shrink_logic_operators_pass(program_tree_t* pt_toplevel) {
+  assert(pt_toplevel->kind == PT_TOPLEVEL);
+
+  return shrink_rec(pt_toplevel);
 }
 
 static bool is_atomic(program_tree_t* expr) {
@@ -56,6 +155,7 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
         break;
       }
     case PT_CALL:
+    case PT_UOP:
     case PT_BINOP:
     case PT_IF:
     case PT_VECTOR:;
@@ -145,6 +245,16 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr) {
         binds = atomize_seq(expr->value.as_subtree_list, binds);
         return unfold_binds(expr, binds);
       }
+    case PT_UOP:;
+      {
+        program_tree_t* operand = expr->value.as_uop.operand;
+        rco_pair_t rco_operand = rco_atom(operand, binds);
+        binds = rco_operand.mappings;
+
+        expr->value.as_uop.operand = rco_operand.atomic_pt;
+
+        return unfold_binds(expr, binds);
+      }
     case PT_BINOP:;
       {
         program_tree_t* lhs = expr->value.as_binop.lhs;
@@ -184,7 +294,7 @@ static program_tree_t* to_mnf_expr(program_tree_t* expr) {
   }
 }
 
-program_tree_t* to_mnf(program_tree_t* pt_toplevel) {
+program_tree_t* to_mnf_pass(program_tree_t* pt_toplevel) {
   assert(pt_toplevel->kind == PT_TOPLEVEL);
 
   array_ptr_t exprs = pt_toplevel->value.as_subtree_list;

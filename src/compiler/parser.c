@@ -29,8 +29,8 @@ static const char* const special_atoms[] = {
     [SPEC_DEFINE] = "define", [SPEC_LET] = "let",
     [SPEC_PLUS] = "+",        [SPEC_MINUS] = "-",
     [SPEC_STAR] = "*",        [SPEC_SLASH] = "/",
-    [SPEC_IF] = "if",         [SPEC_EQ] = "=",
-    [SPEC_NEQ] = "/=",        [SPEC_LT] = "<",
+    [SPEC_IF] = "if",         [SPEC_EQ] = "eq?",
+    [SPEC_NEQ] = "neq?",      [SPEC_LT] = "<",
     [SPEC_LE] = "<=",         [SPEC_GT] = ">",
     [SPEC_GE] = ">=",         [SPEC_NOT] = "not",
     [SPEC_AND] = "and",       [SPEC_OR] = "or",
@@ -38,8 +38,8 @@ static const char* const special_atoms[] = {
     [SPEC_EXTERN] = "extern"};
 
 static const special_atom_t spec_binops[] = {
-    SPEC_PLUS, SPEC_MINUS, SPEC_STAR, SPEC_SLASH, SPEC_LE,
-    SPEC_LT,   SPEC_GE,    SPEC_GT,   SPEC_EQ,    SPEC_NEQ};
+    SPEC_PLUS, SPEC_MINUS, SPEC_STAR, SPEC_SLASH, SPEC_LE, SPEC_LT,
+    SPEC_GE,   SPEC_GT,    SPEC_AND,  SPEC_OR,    SPEC_EQ, SPEC_NEQ};
 
 static const char UNEXP_LEX_ERR_FMT[] =
     "Unexpected character encountered at %lu:%lu";
@@ -501,6 +501,7 @@ static program_tree_t* parse_binop(env_table_t env, token_kind_t closing) {
                     sizeof(spec_binops) / sizeof(special_atom_t)));
 
   static const binop_t spec_to_binop[] = {
+      [SPEC_AND] = BINOP_AND,  [SPEC_OR] = BINOP_OR,
       [SPEC_PLUS] = BINOP_SUM, [SPEC_MINUS] = BINOP_SUB,
       [SPEC_STAR] = BINOP_MUL, [SPEC_SLASH] = BINOP_DIV,
       [SPEC_LE] = BINOP_LE,    [SPEC_LT] = BINOP_LT,
@@ -553,15 +554,14 @@ static program_tree_t* parse_let(env_table_t env, token_kind_t closing) {
   if (name_atom.kind != TK_ATOM)
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
-  int id = g_names_cnt++;
-  env_table_t local_env = env_table_add(env, name_atom.value.as_cstr, id);
-
-  program_tree_t* bind_value = parse_expr(local_env, false);
+  program_tree_t* bind_value = parse_expr(env, false);
 
   token_t paren_c = parser_next_token_consume();
   if (paren_c.kind != tk_closing_bracket(paren_o.kind))
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
+  const int id = g_names_cnt++;
+  env_table_t local_env = env_table_add(env, name_atom.value.as_cstr, id);
   program_tree_t* expr = parse_expr(local_env, false);
 
   token_t form_close = parser_next_token_consume();
@@ -620,6 +620,8 @@ static vector_ptr_t collect_free(const program_tree_t* expr,
         acc = collect_free(expr->value.as_if_form.t_branch_subtree, env, acc);
         return collect_free(expr->value.as_if_form.f_branch_subtree, env, acc);
       }
+    case PT_UOP:
+      return collect_free(expr->value.as_uop.operand, env, acc);
     case PT_BINOP:;
       {
         acc = collect_free(expr->value.as_binop.lhs, env, acc);

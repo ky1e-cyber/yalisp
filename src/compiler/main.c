@@ -35,6 +35,8 @@ static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt) {
     case PT_LAMBDA:
       return dump_parser_errors_and_die_tail(pt->value.as_lambda.body_subtree,
                                              cnt);
+    case PT_UOP:
+      return dump_parser_errors_and_die_tail(pt->value.as_uop.operand, cnt);
     case PT_LET:
       return cnt +
              dump_parser_errors_and_die_tail(
@@ -93,14 +95,13 @@ int main(int argc, char* argv[]) {
   if (dump_parser_errors_and_die_check(pt))
     return 1;
 
-  register_lambdas(pt);
-
   fpprint_pt(stdout, pt);
   printf("\n");
 
-  program_tree_t* mnf = to_mnf(pt);
+  program_tree_t* transformed =
+      to_mnf_pass(shrink_logic_operators_pass(register_lambdas_pass(pt)));
 
-  fpprint_pt(stdout, mnf);
+  fpprint_pt(stdout, transformed);
 
   shared_deinit();
 
