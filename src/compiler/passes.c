@@ -12,8 +12,8 @@ static noreturn void error_pass_buf() {
   error("Allocation failure in buffer for transformation passes\n");
 }
 
-program_tree_t* register_lambdas_pass(program_tree_t* pt_toplevel) {
-  register_lambdas(pt_toplevel);
+program_tree_t* register_pass(program_tree_t* pt_toplevel) {
+  register_stuff(pt_toplevel);
   return pt_toplevel;
 }
 
@@ -112,8 +112,7 @@ program_tree_t* shrink_logic_operators_pass(program_tree_t* pt_toplevel) {
 }
 
 static bool is_atomic(program_tree_t* expr) {
-  static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL,
-                                      PT_STR_LITERAL, PT_NAME};
+  static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL, PT_NAME};
   return m_contains(expr->kind, atomics, sizeof(atomics) / sizeof(pt_kind_t));
 }
 
@@ -129,7 +128,6 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
   switch (expr->kind) {
     case PT_BOOL_LITERAL:
     case PT_INT_LITERAL:
-    case PT_STR_LITERAL:
     case PT_NAME:
     case PT_GLOBAL_SYMBOL:
       return (rco_pair_t){.atomic_pt = expr, .mappings = acc};
@@ -154,6 +152,8 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
         value = let_mnf;
         break;
       }
+
+    case PT_STR_LITERAL:
     case PT_CALL:
     case PT_UOP:
     case PT_BINOP:
@@ -171,7 +171,7 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
       }
   }
 
-  int id = g_names_cnt++;
+  int id = next_name_id();
   bind_pair_t bind = {.name_id = id, .value_subtree = value};
   acc = vector_push_back(bind_pair_t, acc, bind);
 

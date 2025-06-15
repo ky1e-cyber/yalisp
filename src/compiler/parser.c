@@ -560,7 +560,7 @@ static program_tree_t* parse_let(env_table_t env, token_kind_t closing) {
   if (paren_c.kind != tk_closing_bracket(paren_o.kind))
     return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
-  const int id = g_names_cnt++;
+  const int id = next_name_id();
   env_table_t local_env = env_table_add(env, name_atom.value.as_cstr, id);
   program_tree_t* expr = parse_expr(local_env, false);
 
@@ -667,7 +667,7 @@ static program_tree_t* parse_lambda(env_table_t env, token_kind_t closing) {
     if (nxt.kind != TK_ATOM)
       return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 
-    int id = g_names_cnt++;
+    int id = next_name_id();
     env = env_table_add(env, nxt.value.as_cstr, id);
     params_buf = vector_push_back(int, params_buf, id);
 

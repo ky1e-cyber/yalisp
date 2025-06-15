@@ -63,7 +63,8 @@ program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
                                        loc_t loc,
                                        const char* value) {
   return pt_make_node(pt_arena, loc, PT_STR_LITERAL,
-                      (pt_value_t){.as_cstr = value}, NULL);
+                      (pt_value_t){.as_str_literal = {.id = -1, .cstr = value}},
+                      NULL);
 }
 
 program_tree_t* pt_make_name(arena_ptr_t pt_arena, loc_t loc, int name_id) {
@@ -138,19 +139,17 @@ program_tree_t* pt_make_global(arena_ptr_t pt_arena,
                                loc_t loc,
                                const char* symbol) {
   return pt_make_node(pt_arena, loc, PT_GLOBAL_SYMBOL,
-                      (pt_value_t){.as_cstr = symbol}, NULL);
+                      (pt_value_t){.as_symbol = symbol}, NULL);
 }
 
-static void fpprint_pt_seq(FILE* stream,
-                           array_ptr_t /* [program_tree_t*] */ lst,
-                           char delim) {
+static void pprint_pt_seq(array_ptr_t /* [program_tree_t*] */ lst, char delim) {
   size_t seq_sz = array_size(lst);
   if (seq_sz > 0) {
     for (size_t i = 0; i < seq_sz - 1; i++) {
-      fpprint_pt(stream, array_data(program_tree_t*, lst)[i]);
-      fprintf(stream, "%c", delim);
+      pprint_pt(array_data(program_tree_t*, lst)[i]);
+      printf("%c", delim);
     }
-    fpprint_pt(stream, array_data(program_tree_t*, lst)[seq_sz - 1]);
+    pprint_pt(array_data(program_tree_t*, lst)[seq_sz - 1]);
   }
 }
 
@@ -161,21 +160,21 @@ program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                       (pt_value_t){.as_subtree_list = elems}, NULL);
 }
 
-static void fpprint_pt_if(FILE* stream, pt_if_form_t if_form) {
-  fprintf(stream, "if ");
-  fpprint_pt(stream, if_form.cond_subtree);
-  fprintf(stream, " then ");
-  fpprint_pt(stream, if_form.t_branch_subtree);
-  fprintf(stream, " else ");
-  fpprint_pt(stream, if_form.f_branch_subtree);
+static void pprint_pt_if(pt_if_form_t if_form) {
+  printf("if ");
+  pprint_pt(if_form.cond_subtree);
+  printf(" then ");
+  pprint_pt(if_form.t_branch_subtree);
+  printf(" else ");
+  pprint_pt(if_form.f_branch_subtree);
 }
 
-static void fpprint_pt_call(FILE* stream, pt_call_t call) {
-  fprintf(stream, "(");
-  fpprint_pt(stream, call.fn_subtree);
-  fprintf(stream, " ");
-  fpprint_pt_seq(stream, call.args_subtrees, ' ');
-  fprintf(stream, ")");
+static void pprint_pt_call(pt_call_t call) {
+  printf("(");
+  pprint_pt(call.fn_subtree);
+  printf(" ");
+  pprint_pt_seq(call.args_subtrees, ' ');
+  printf(")");
 }
 
 static const char* binop_repr(binop_t op) {
@@ -200,126 +199,124 @@ static const char* uop_repr(uop_t op) {
   return reprs[op];
 }
 
-static void fpprint_pt_uop(FILE* stream, pt_uop_t uop) {
-  fprintf(stream, "(");
-  fprintf(stream, "OP(%s) ", uop_repr(uop.op));
-  fpprint_pt(stream, uop.operand);
-  fprintf(stream, ")");
+static void pprint_pt_uop(pt_uop_t uop) {
+  printf("(");
+  printf("OP(%s) ", uop_repr(uop.op));
+  pprint_pt(uop.operand);
+  printf(")");
 }
 
-static void fpprint_pt_binop(FILE* stream, pt_binop_t binop) {
-  fprintf(stream, "(OP(%s) ", binop_repr(binop.op));
-  fpprint_pt(stream, binop.lhs);
-  fprintf(stream, " ");
-  fpprint_pt(stream, binop.rhs);
-  fprintf(stream, ")");
+static void pprint_pt_binop(pt_binop_t binop) {
+  printf("(OP(%s) ", binop_repr(binop.op));
+  pprint_pt(binop.lhs);
+  printf(" ");
+  pprint_pt(binop.rhs);
+  printf(")");
 }
 
-static void fpprint_pt_let(FILE* stream, pt_let_form_t let) {
-  fprintf(stream, "let $var%d := ", let.bind.name_id);
-  fpprint_pt(stream, let.bind.value_subtree);
-  fprintf(stream, " in ");
-  fpprint_pt(stream, let.expr_subtree);
+static void pprint_pt_let(pt_let_form_t let) {
+  printf("let $var%d := ", let.bind.name_id);
+  pprint_pt(let.bind.value_subtree);
+  printf(" in ");
+  pprint_pt(let.expr_subtree);
 }
 
-static void fpprint_pt_lambda(FILE* stream, pt_lambda_t lambda) {
-  fprintf(stream, "[");
+static void pprint_pt_lambda(pt_lambda_t lambda) {
+  printf("lambda(id: %d)[", lambda.id);
   size_t captured_sz = array_size(lambda.captured);
   if (captured_sz > 0) {
     for (size_t i = 0; i < captured_sz - 1; i++)
-      fprintf(stream, "$var%d ", array_data(int, lambda.captured)[i]);
-    fprintf(stream, "$var%d",
-            array_data(int, lambda.captured)[captured_sz - 1]);
+      printf("$var%d ", array_data(int, lambda.captured)[i]);
+    printf("$var%d", array_data(int, lambda.captured)[captured_sz - 1]);
   }
-  fprintf(stream, "]");
-  fprintf(stream, "\\");
+  printf("]");
+  printf("\\");
   array_ptr_t params = lambda.params;
   size_t params_sz = array_size(params);
 
-  for (size_t i = 0; i < params_sz; i++) {
-    fprintf(stream, "$var%d ", array_data(int, params)[i]);
-  }
+  for (size_t i = 0; i < params_sz; i++)
+    printf("$var%d ", array_data(int, params)[i]);
 
-  fprintf(stream, "-> ");
-  fpprint_pt(stream, lambda.body_subtree);
+  printf("-> ");
+  pprint_pt(lambda.body_subtree);
 }
 
-static void fpprint_pt_vector(FILE* stream,
-                              array_ptr_t /* [program_tree_t*] */ elems) {
-  fprintf(stream, "{");
-  fpprint_pt_seq(stream, elems, ' ');
-  fprintf(stream, "}");
+static void pprint_pt_vector(array_ptr_t /* [program_tree_t*] */ elems) {
+  printf("{");
+  pprint_pt_seq(elems, ' ');
+  printf("}");
 }
 
-void fpprint_pt(FILE* stream, program_tree_t* pt) {
+void pprint_pt(program_tree_t* pt) {
   switch (pt->kind) {
     case PT_ERROR:;
       {
-        fprintf(stream, "ERROR(%s)", pt->err_msg);
+        printf("ERROR(%s)", pt->err_msg);
         break;
       }
     case PT_TOPLEVEL:;
       {
-        fpprint_pt_seq(stream, pt->value.as_subtree_list, '\n');
-        fprintf(stream, "\n");
+        pprint_pt_seq(pt->value.as_subtree_list, '\n');
+        printf("\n");
         break;
       }
     case PT_BOOL_LITERAL:;
       {
-        fprintf(stream, "BOOL(%s)", pt->value.as_bool ? "true" : "false");
+        printf("BOOL(%s)", pt->value.as_bool ? "true" : "false");
         break;
       }
     case PT_INT_LITERAL:;
       {
-        fprintf(stream, "INT(%lli)", pt->value.as_i64);
+        printf("INT(%lli)", pt->value.as_i64);
         break;
       }
     case PT_STR_LITERAL:;
       {
-        fprintf(stream, "STRING(%s)", pt->value.as_cstr);
+        printf("STRING(id: %d, \"%s\")", pt->value.as_str_literal.id,
+               pt->value.as_str_literal.cstr);
         break;
       }
     case PT_NAME:;
       {
-        fprintf(stream, "$var%d", pt->value.as_name_id);
+        printf("$var%d", pt->value.as_name_id);
         break;
       }
     case PT_UOP:;
       {
-        fpprint_pt_uop(stream, pt->value.as_uop);
+        pprint_pt_uop(pt->value.as_uop);
         break;
       }
     case PT_BINOP:
-      fpprint_pt_binop(stream, pt->value.as_binop);
+      pprint_pt_binop(pt->value.as_binop);
       break;
     case PT_IF:;
       {
-        fpprint_pt_if(stream, pt->value.as_if_form);
+        pprint_pt_if(pt->value.as_if_form);
         break;
       }
     case PT_CALL:;
       {
-        fpprint_pt_call(stream, pt->value.as_call);
+        pprint_pt_call(pt->value.as_call);
         break;
       }
     case PT_LET:;
       {
-        fpprint_pt_let(stream, pt->value.as_let_form);
+        pprint_pt_let(pt->value.as_let_form);
         break;
       }
     case PT_LAMBDA:;
       {
-        fpprint_pt_lambda(stream, pt->value.as_lambda);
+        pprint_pt_lambda(pt->value.as_lambda);
         break;
       }
     case PT_GLOBAL_SYMBOL:;
       {
-        fprintf(stream, "GLOBAL(%s)", pt->value.as_cstr);
+        printf("GLOBAL(%s)", pt->value.as_symbol);
         break;
       }
     case PT_VECTOR:;
       {
-        fpprint_pt_vector(stream, pt->value.as_subtree_list);
+        pprint_pt_vector(pt->value.as_subtree_list);
         break;
       }
   }

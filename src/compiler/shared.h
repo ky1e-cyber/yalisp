@@ -22,6 +22,9 @@ extern arena_ptr_t g_env_arena;
 
 extern globals_table_t g_globals_table;
 
+extern int g_str_cnt;
+extern pt_str_literal_t* g_str_literals;
+
 extern int g_lambdas_cnt;
 extern pt_lambda_t* g_lambdas;
 
@@ -32,6 +35,12 @@ void shared_init(size_t str_arena_size,
 
 void shared_deinit();
 
-void register_lambdas(program_tree_t* pt_toplevel);
+void register_stuff(program_tree_t* pt_toplevel);
+
+int next_name_id();
+
+int next_str_id();
+
+int next_lambda_id();
 
 #endif

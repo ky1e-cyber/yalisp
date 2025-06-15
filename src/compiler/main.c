@@ -91,17 +91,12 @@ int main(int argc, char* argv[]) {
   shared_init(STR_ARENA_SIZE, PT_ARENA_SIZE, GLOBALS_ARENA_SIZE,
               ENV_ARENA_SIZE);
   program_tree_t* pt = parse(src_path);
-
   if (dump_parser_errors_and_die_check(pt))
     return 1;
 
-  fpprint_pt(stdout, pt);
-  printf("\n");
-
   program_tree_t* transformed =
-      to_mnf_pass(shrink_logic_operators_pass(register_lambdas_pass(pt)));
-
-  fpprint_pt(stdout, transformed);
+      to_mnf_pass(shrink_logic_operators_pass(register_pass(pt)));
+  pprint_pt(transformed);
 
   shared_deinit();
 

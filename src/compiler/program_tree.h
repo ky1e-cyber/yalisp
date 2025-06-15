@@ -11,6 +11,11 @@
 typedef struct program_tree_t__ program_tree_t;
 
 typedef struct {
+  int id;
+  const char* cstr;
+} pt_str_literal_t;
+
+typedef struct {
   int name_id;
   program_tree_t* value_subtree;
 } bind_pair_t;
@@ -88,7 +93,8 @@ typedef union {
   array_ptr_t /* [program_tree_t*] */ as_subtree_list;
   bool as_bool;
   int64_t as_i64;
-  const char* as_cstr;
+  pt_str_literal_t as_str_literal;
+  const char* as_symbol;
   int as_name_id;
   program_tree_t* as_subtree;
   pt_binop_t as_binop;
@@ -172,6 +178,6 @@ program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                                loc_t loc,
                                array_ptr_t /* [program_tree_t*] */ elems);
 
-void fpprint_pt(FILE* stream, program_tree_t* pt);
+void pprint_pt(program_tree_t* pt);
 
 #endif
