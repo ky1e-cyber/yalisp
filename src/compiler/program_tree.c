@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "arena.h"
 #include "array.h"
+#include "macros.h"
 #include "program_tree.h"
 
 static program_tree_t* pt_make_node(arena_ptr_t pt_arena,
@@ -61,7 +62,7 @@ program_tree_t* pt_make_i64_literal(arena_ptr_t pt_arena,
 
 program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
                                        loc_t loc,
-                                       const char* value) {
+                                       char* value) {
   return pt_make_node(pt_arena, loc, PT_STR_LITERAL,
                       (pt_value_t){.as_str_literal = {.id = -1, .cstr = value}},
                       NULL);
@@ -135,9 +136,7 @@ program_tree_t* pt_make_call(arena_ptr_t pt_arena,
       (pt_value_t){.as_call = {.fn_subtree = fn, .args_subtrees = args}}, NULL);
 }
 
-program_tree_t* pt_make_global(arena_ptr_t pt_arena,
-                               loc_t loc,
-                               const char* symbol) {
+program_tree_t* pt_make_global(arena_ptr_t pt_arena, loc_t loc, char* symbol) {
   return pt_make_node(pt_arena, loc, PT_GLOBAL_SYMBOL,
                       (pt_value_t){.as_symbol = symbol}, NULL);
 }
@@ -163,6 +162,16 @@ program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
 bool is_atomic(program_tree_t* expr) {
   static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL, PT_NAME};
   return m_contains(expr->kind, atomics, sizeof(atomics) / sizeof(pt_kind_t));
+}
+
+bool is_primitive_literal(program_tree_t* expr) {
+  static const pt_kind_t literals[] = {PT_BOOL_LITERAL, PT_INT_LITERAL};
+  return m_contains(expr->kind, literals, sizeof(literals) / sizeof(pt_kind_t));
+}
+
+bool is_name(program_tree_t* expr) {
+  static const pt_kind_t names[] = {PT_GLOBAL_SYMBOL, PT_NAME};
+  return m_contains(expr->kind, names, sizeof(names) / sizeof(pt_kind_t));
 }
 
 static void pprint_pt_if(pt_if_form_t if_form) {

@@ -12,7 +12,7 @@ typedef struct program_tree_t__ program_tree_t;
 
 typedef struct {
   int id;
-  const char* cstr;
+  char* cstr;
 } pt_str_literal_t;
 
 typedef struct {
@@ -94,7 +94,7 @@ typedef union {
   bool as_bool;
   int64_t as_i64;
   pt_str_literal_t as_str_literal;
-  const char* as_symbol;
+  char* as_symbol;
   int as_name_id;
   program_tree_t* as_subtree;
   pt_binop_t as_binop;
@@ -133,7 +133,7 @@ program_tree_t* pt_make_i64_literal(arena_ptr_t pt_arena,
 
 program_tree_t* pt_make_string_literal(arena_ptr_t pt_arena,
                                        loc_t loc,
-                                       const char* value);
+                                       char* value);
 
 program_tree_t* pt_make_name(arena_ptr_t pt_arena, loc_t loc, int name_id);
 
@@ -172,13 +172,17 @@ program_tree_t* pt_make_call(arena_ptr_t pt_arena,
 
 program_tree_t* pt_make_global(arena_ptr_t pt_arena,
                                loc_t loc,
-                               const char* symbol);
+                               char* symbol);
 
 program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                                loc_t loc,
                                array_ptr_t /* [program_tree_t*] */ elems);
 
 bool is_atomic(program_tree_t* expr);
+
+bool is_primitive_literal(program_tree_t* expr);
+
+bool is_name(program_tree_t* expr);
 
 void pt_pprint(program_tree_t* pt);
 

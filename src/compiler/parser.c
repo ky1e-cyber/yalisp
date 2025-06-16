@@ -43,6 +43,8 @@ static const special_atom_t spec_binops[] = {
     SPEC_PLUS, SPEC_MINUS, SPEC_STAR, SPEC_SLASH, SPEC_LE, SPEC_LT,
     SPEC_GE,   SPEC_GT,    SPEC_AND,  SPEC_OR,    SPEC_EQ, SPEC_NEQ};
 
+static const special_atom_t spec_uops[] = {SPEC_NOT};
+
 static const char UNEXP_LEX_ERR_FMT[] =
     "Unexpected character encountered at %lu:%lu";
 static const char NUM_LEX_ERR_FMT[] = "Invalid numeric literal at %lu:%lu";
@@ -494,6 +496,33 @@ parse_list_tail(env_table_t env, token_kind_t closing) {
   return lst;
 }
 
+static program_tree_t* parse_uop(env_table_t env, token_kind_t closing) {
+  token_t op_tk = parser_next_token_consume();
+  loc_t loc = op_tk.loc;
+
+  assert(op_tk.kind == TK_SPECIAL_ATOM);
+  assert(m_contains(op_tk.value.as_special_atom, spec_uops,
+                    sizeof(spec_uops) / sizeof(special_atom_t)));
+
+  static const uop_t spec_to_uop[] = {[SPEC_NOT] = UNARY_NOT};
+
+  do {
+    program_tree_t* operand = parse_expr(env, false);
+    if (operand->kind == PT_ERROR)
+      break;
+
+    token_t paren_c = parser_next_token_consume();
+    if (paren_c.kind != closing)
+      break;
+
+    return pt_make_uop(g_pt_arena, loc,
+                       spec_to_uop[op_tk.value.as_special_atom], operand);
+
+  } while (false);
+
+  return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
+}
+
 static program_tree_t* parse_binop(env_table_t env, token_kind_t closing) {
   token_t op_tk = parser_next_token_consume();
   loc_t loc = op_tk.loc;
@@ -799,10 +828,12 @@ static program_tree_t* parse_list(env_table_t env, bool is_toplevel) {
     if (spec == SPEC_EXTERN)
       return parse_extern(closing, is_toplevel);
 
+    if (m_contains(spec, spec_uops, sizeof(spec_uops) / sizeof(special_atom_t)))
+      return parse_uop(env, closing);
+
     if (m_contains(spec, spec_binops,
-                   sizeof(spec_binops) / sizeof(special_atom_t))) {
+                   sizeof(spec_binops) / sizeof(special_atom_t)))
       return parse_binop(env, closing);
-    }
 
     parser_next_token_consume();
     return pt_error_at(g_pt_arena, g_str_arena, loc, UNEXP_FMT);

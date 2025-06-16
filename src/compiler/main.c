@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "array.h"
+#include "codegen.h"
 #include "defs.h"
 #include "error.h"
 #include "parser.h"
@@ -94,8 +95,11 @@ int main(int argc, char* argv[]) {
     return 1;
 
   program_tree_t* transformed =
-      to_mnf_pass(remove_logic_operators_pass(register_pass(pt)));
-  pt_pprint(transformed);
+      register_pass(to_mnf_pass(remove_logic_operators_pass(pt)));
+
+  printf("\n");
+
+  dump_qbe(transformed);
 
   shared_deinit();
 
