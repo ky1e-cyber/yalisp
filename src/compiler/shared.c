@@ -77,7 +77,19 @@ void shared_deinit() {
 static vector_ptr_t g_register_lambdas_acc;
 static vector_ptr_t g_register_strings_acc;
 
-void register_action(program_tree_t* pt) {
+int next_name_id() {
+  return (g_names_cnt++) + 1;
+}
+
+int next_str_id() {
+  return (g_str_cnt++) + 1;
+}
+
+int next_lambda_id() {
+  return (g_lambdas_cnt++) + 1;
+}
+
+static void register_action(program_tree_t* pt) {
   switch (pt->kind) {
     case PT_STR_LITERAL:;
       {
@@ -96,18 +108,6 @@ void register_action(program_tree_t* pt) {
     default:
       return;
   }
-}
-
-int next_name_id() {
-  return (g_names_cnt++) + 1;
-}
-
-int next_str_id() {
-  return (g_str_cnt++) + 1;
-}
-
-int next_lambda_id() {
-  return (g_lambdas_cnt++) + 1;
 }
 
 void register_stuff(program_tree_t* pt_toplevel) {
