@@ -146,10 +146,10 @@ static void pprint_pt_seq(array_ptr_t /* [program_tree_t*] */ lst, char delim) {
   size_t seq_sz = array_size(lst);
   if (seq_sz > 0) {
     for (size_t i = 0; i < seq_sz - 1; i++) {
-      pprint_pt(array_data(program_tree_t*, lst)[i]);
+      pt_pprint(array_data(program_tree_t*, lst)[i]);
       printf("%c", delim);
     }
-    pprint_pt(array_data(program_tree_t*, lst)[seq_sz - 1]);
+    pt_pprint(array_data(program_tree_t*, lst)[seq_sz - 1]);
   }
 }
 
@@ -160,18 +160,23 @@ program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                       (pt_value_t){.as_subtree_list = elems}, NULL);
 }
 
+bool is_atomic(program_tree_t* expr) {
+  static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL, PT_NAME};
+  return m_contains(expr->kind, atomics, sizeof(atomics) / sizeof(pt_kind_t));
+}
+
 static void pprint_pt_if(pt_if_form_t if_form) {
   printf("if ");
-  pprint_pt(if_form.cond_subtree);
+  pt_pprint(if_form.cond_subtree);
   printf(" then ");
-  pprint_pt(if_form.t_branch_subtree);
+  pt_pprint(if_form.t_branch_subtree);
   printf(" else ");
-  pprint_pt(if_form.f_branch_subtree);
+  pt_pprint(if_form.f_branch_subtree);
 }
 
 static void pprint_pt_call(pt_call_t call) {
   printf("(");
-  pprint_pt(call.fn_subtree);
+  pt_pprint(call.fn_subtree);
   printf(" ");
   pprint_pt_seq(call.args_subtrees, ' ');
   printf(")");
@@ -179,10 +184,10 @@ static void pprint_pt_call(pt_call_t call) {
 
 static const char* binop_repr(binop_t op) {
   static const char* reprs[] = {
-      [BINOP_SUM] = "+", [BINOP_SUB] = "-", [BINOP_MUL] = "*",
-      [BINOP_DIV] = "/", [BINOP_LE] = "<=", [BINOP_LT] = "<",
-      [BINOP_GE] = ">=", [BINOP_GT] = ">",  [BINOP_EQ] = "=",
-      [BINOP_NEQ] = "/="};
+      [BINOP_SUM] = "+",   [BINOP_SUB] = "-", [BINOP_MUL] = "*",
+      [BINOP_DIV] = "/",   [BINOP_LE] = "<=", [BINOP_LT] = "<",
+      [BINOP_GE] = ">=",   [BINOP_GT] = ">",  [BINOP_EQ] = "eq?",
+      [BINOP_NEQ] = "neq?"};
 
   static_assert(sizeof(reprs) / sizeof(char*) == BINOP_COUNT__,
                 "Some binops missing representations");
@@ -202,23 +207,23 @@ static const char* uop_repr(uop_t op) {
 static void pprint_pt_uop(pt_uop_t uop) {
   printf("(");
   printf("OP(%s) ", uop_repr(uop.op));
-  pprint_pt(uop.operand);
+  pt_pprint(uop.operand);
   printf(")");
 }
 
 static void pprint_pt_binop(pt_binop_t binop) {
   printf("(OP(%s) ", binop_repr(binop.op));
-  pprint_pt(binop.lhs);
+  pt_pprint(binop.lhs);
   printf(" ");
-  pprint_pt(binop.rhs);
+  pt_pprint(binop.rhs);
   printf(")");
 }
 
 static void pprint_pt_let(pt_let_form_t let) {
   printf("let $var%d := ", let.bind.name_id);
-  pprint_pt(let.bind.value_subtree);
+  pt_pprint(let.bind.value_subtree);
   printf(" in ");
-  pprint_pt(let.expr_subtree);
+  pt_pprint(let.expr_subtree);
 }
 
 static void pprint_pt_lambda(pt_lambda_t lambda) {
@@ -238,7 +243,7 @@ static void pprint_pt_lambda(pt_lambda_t lambda) {
     printf("$var%d ", array_data(int, params)[i]);
 
   printf("-> ");
-  pprint_pt(lambda.body_subtree);
+  pt_pprint(lambda.body_subtree);
 }
 
 static void pprint_pt_vector(array_ptr_t /* [program_tree_t*] */ elems) {
@@ -247,7 +252,7 @@ static void pprint_pt_vector(array_ptr_t /* [program_tree_t*] */ elems) {
   printf("}");
 }
 
-void pprint_pt(program_tree_t* pt) {
+void pt_pprint(program_tree_t* pt) {
   switch (pt->kind) {
     case PT_ERROR:;
       {
@@ -320,4 +325,132 @@ void pprint_pt(program_tree_t* pt) {
         break;
       }
   }
+}
+
+static void pt_seq_fmap(array_ptr_t pts, pt_fmap_op_t op) {
+  for (size_t i = 0; i < array_size(pts); i++)
+    array_data(program_tree_t*, pts)[i] =
+        pt_fmap(array_data(program_tree_t*, pts)[i], op);
+}
+
+static void pt_seq_fmap_(array_ptr_t pts, pt_fmap_action_t action) {
+  for (size_t i = 0; i < array_size(pts); i++)
+    pt_fmap_(array_data(program_tree_t*, pts)[i], action);
+}
+
+program_tree_t* pt_fmap(program_tree_t* pt, pt_fmap_op_t op) {
+  switch (pt->kind) {
+    case PT_ERROR:
+    case PT_GLOBAL_SYMBOL:
+    case PT_NAME:
+    case PT_BOOL_LITERAL:
+    case PT_INT_LITERAL:
+    case PT_STR_LITERAL:
+      break;
+    case PT_VECTOR:
+    case PT_TOPLEVEL:;
+      {
+        pt_seq_fmap(pt->value.as_subtree_list, op);
+        break;
+      }
+    case PT_LET:;
+      {
+        pt->value.as_let_form.bind.value_subtree =
+            pt_fmap(pt->value.as_let_form.bind.value_subtree, op);
+
+        pt->value.as_let_form.expr_subtree =
+            pt_fmap(pt->value.as_let_form.expr_subtree, op);
+        break;
+      }
+    case PT_UOP:;
+      {
+        pt->value.as_uop.operand = pt_fmap(pt->value.as_uop.operand, op);
+        break;
+      }
+    case PT_BINOP:;
+      {
+        pt->value.as_binop.lhs = pt_fmap(pt->value.as_binop.lhs, op);
+        pt->value.as_binop.rhs = pt_fmap(pt->value.as_binop.rhs, op);
+        break;
+      }
+    case PT_CALL:;
+      {
+        pt->value.as_call.fn_subtree =
+            pt_fmap(pt->value.as_call.fn_subtree, op);
+        pt_seq_fmap(pt->value.as_call.args_subtrees, op);
+        break;
+      }
+    case PT_IF:;
+      {
+        pt->value.as_if_form.cond_subtree =
+            pt_fmap(pt->value.as_if_form.cond_subtree, op);
+        pt->value.as_if_form.t_branch_subtree =
+            pt_fmap(pt->value.as_if_form.t_branch_subtree, op);
+        pt->value.as_if_form.f_branch_subtree =
+            pt_fmap(pt->value.as_if_form.f_branch_subtree, op);
+        break;
+      }
+    case PT_LAMBDA:;
+      {
+        pt->value.as_lambda.body_subtree =
+            pt_fmap(pt->value.as_lambda.body_subtree, op);
+        break;
+      }
+  }
+
+  return op(pt);
+}
+
+void pt_fmap_(program_tree_t* pt, pt_fmap_action_t action) {
+  switch (pt->kind) {
+    case PT_ERROR:
+    case PT_GLOBAL_SYMBOL:
+    case PT_NAME:
+    case PT_BOOL_LITERAL:
+    case PT_INT_LITERAL:
+    case PT_STR_LITERAL:
+      break;
+    case PT_VECTOR:
+    case PT_TOPLEVEL:;
+      {
+        pt_seq_fmap_(pt->value.as_subtree_list, action);
+        break;
+      }
+    case PT_LET:;
+      {
+        pt_fmap_(pt->value.as_let_form.bind.value_subtree, action);
+        pt_fmap_(pt->value.as_let_form.expr_subtree, action);
+        break;
+      }
+    case PT_UOP:;
+      {
+        pt_fmap_(pt->value.as_uop.operand, action);
+        break;
+      }
+    case PT_BINOP:;
+      {
+        pt_fmap_(pt->value.as_binop.lhs, action);
+        pt_fmap_(pt->value.as_binop.rhs, action);
+        break;
+      }
+    case PT_CALL:;
+      {
+        pt_fmap_(pt->value.as_call.fn_subtree, action);
+        pt_seq_fmap_(pt->value.as_call.args_subtrees, action);
+        break;
+      }
+    case PT_IF:;
+      {
+        pt_fmap_(pt->value.as_if_form.cond_subtree, action);
+        pt_fmap_(pt->value.as_if_form.t_branch_subtree, action);
+        pt_fmap_(pt->value.as_if_form.f_branch_subtree, action);
+        break;
+      }
+    case PT_LAMBDA:;
+      {
+        pt_fmap_(pt->value.as_lambda.body_subtree, action);
+        break;
+      }
+  }
+  action(pt);
 }

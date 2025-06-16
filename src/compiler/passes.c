@@ -17,103 +17,35 @@ program_tree_t* register_pass(program_tree_t* pt_toplevel) {
   return pt_toplevel;
 }
 
-static program_tree_t* shrink_rec(program_tree_t* pt);
-
-static void shrink_seq(array_ptr_t /* [program_tree_t*] */ subtrees) {
-  for (size_t i = 0; i < array_size(subtrees); i++)
-    array_data(program_tree_t*, subtrees)[i] =
-        shrink_rec(array_data(program_tree_t*, subtrees)[i]);
-}
-
-static program_tree_t* shrink_rec(program_tree_t* pt) {
+static program_tree_t* remove_logic_binops_op(program_tree_t* pt) {
   switch (pt->kind) {
-    case PT_ERROR:
-    case PT_BOOL_LITERAL:
-    case PT_INT_LITERAL:
-    case PT_STR_LITERAL:
-    case PT_NAME:
-    case PT_GLOBAL_SYMBOL:
-      return pt;
-    case PT_UOP:;
+    case PT_BINOP:;
       {
-        pt->value.as_uop.operand = shrink_rec(pt->value.as_uop.operand);
-        return pt;
+        switch (pt->value.as_binop.op) {
+          case BINOP_AND:
+            return pt_make_if(
+                g_pt_arena, (loc_t){}, pt->value.as_binop.lhs,
+                pt->value.as_binop.rhs,
+                pt_make_bool_literal(g_pt_arena, (loc_t){}, false));
+
+          case BINOP_OR:
+            return pt_make_if(g_pt_arena, (loc_t){}, pt->value.as_binop.lhs,
+                              pt_make_bool_literal(g_pt_arena, (loc_t){}, true),
+                              pt->value.as_binop.rhs);
+          default:
+            break;
+        }
+        break;
       }
-    case PT_LET:;
-      {
-        program_tree_t* bind_val = pt->value.as_let_form.bind.value_subtree;
-        program_tree_t* val = pt->value.as_let_form.expr_subtree;
-
-        pt->value.as_let_form.bind.value_subtree = shrink_rec(bind_val);
-        pt->value.as_let_form.expr_subtree = shrink_rec(val);
-
-        return pt;
-      }
-    case PT_LAMBDA:;
-      {
-        pt->value.as_lambda.body_subtree =
-            shrink_rec(pt->value.as_lambda.body_subtree);
-
-        return pt;
-      }
-    case PT_CALL:;
-      {
-        pt->value.as_call.fn_subtree = shrink_rec(pt->value.as_call.fn_subtree);
-        shrink_seq(pt->value.as_call.args_subtrees);
-        return pt;
-      }
-    case PT_IF:;
-      {
-        pt->value.as_if_form.cond_subtree =
-            shrink_rec(pt->value.as_if_form.cond_subtree);
-        pt->value.as_if_form.t_branch_subtree =
-            shrink_rec(pt->value.as_if_form.t_branch_subtree);
-        pt->value.as_if_form.f_branch_subtree =
-            shrink_rec(pt->value.as_if_form.f_branch_subtree);
-        return pt;
-      }
-    case PT_VECTOR:
-    case PT_TOPLEVEL:;
-      {
-        shrink_seq(pt->value.as_subtree_list);
-        return pt;
-      }
-    case PT_BINOP: {
-      pt->value.as_binop.lhs = shrink_rec(pt->value.as_binop.lhs);
-      pt->value.as_binop.rhs = shrink_rec(pt->value.as_binop.rhs);
-
-      binop_t op = pt->value.as_binop.op;
-      program_tree_t* lhs = pt->value.as_binop.lhs;
-      program_tree_t* rhs = pt->value.as_binop.rhs;
-
-      switch (op) {
-        case BINOP_AND:
-          return pt_make_if(g_pt_arena, (loc_t){}, lhs, rhs,
-                            pt_make_bool_literal(g_pt_arena, (loc_t){}, false));
-
-        case BINOP_OR:
-          return pt_make_if(g_pt_arena, (loc_t){}, lhs,
-                            pt_make_bool_literal(g_pt_arena, (loc_t){}, true),
-                            rhs);
-
-        default:
-          break;
-      }
-
-      return pt;
-    }
+    default:
+      break;
   }
+
+  return pt;
 }
 
-program_tree_t* shrink_logic_operators_pass(program_tree_t* pt_toplevel) {
-  assert(pt_toplevel->kind == PT_TOPLEVEL);
-
-  return shrink_rec(pt_toplevel);
-}
-
-static bool is_atomic(program_tree_t* expr) {
-  static const pt_kind_t atomics[] = {PT_BOOL_LITERAL, PT_INT_LITERAL, PT_NAME};
-  return m_contains(expr->kind, atomics, sizeof(atomics) / sizeof(pt_kind_t));
+program_tree_t* remove_logic_operators_pass(program_tree_t* pt_toplevel) {
+  return pt_fmap(pt_toplevel, remove_logic_binops_op);
 }
 
 static program_tree_t* to_mnf_expr(program_tree_t* pt);
@@ -204,106 +136,66 @@ static vector_ptr_t atomize_seq(array_ptr_t /* [program_tree_t*] */ exprs,
   return binds;
 }
 
-static program_tree_t* to_mnf_expr(program_tree_t* expr) {
+static program_tree_t* to_mnf_op(program_tree_t* pt) {
   vector_ptr_t binds m_cleanup(vector_cleanup) =
       vector_make(bind_pair_t, error_pass_buf);
 
-  switch (expr->kind) {
-    case PT_BOOL_LITERAL:
-    case PT_INT_LITERAL:
-    case PT_STR_LITERAL:
-    case PT_NAME:
-    case PT_GLOBAL_SYMBOL:
-      return expr;
-    case PT_LAMBDA:;
-      {
-        expr->value.as_lambda.body_subtree =
-            to_mnf_expr(expr->value.as_lambda.body_subtree);
-        return expr;
-      }
-    case PT_LET:;
-      {
-        program_tree_t* let_expr = expr->value.as_let_form.expr_subtree;
-        program_tree_t* let_bind_expr =
-            expr->value.as_let_form.bind.value_subtree;
-        expr->value.as_let_form.expr_subtree = to_mnf_expr(let_expr);
-        expr->value.as_let_form.bind.value_subtree = to_mnf_expr(let_bind_expr);
-        return expr;
-      }
+  switch (pt->kind) {
     case PT_CALL:;
       {
-        rco_pair_t rco_fn = rco_atom(expr->value.as_call.fn_subtree, binds);
+        rco_pair_t rco_fn = rco_atom(pt->value.as_call.fn_subtree, binds);
         binds = rco_fn.mappings;
-        expr->value.as_call.fn_subtree = rco_fn.atomic_pt;
-
-        binds = atomize_seq(expr->value.as_call.args_subtrees, binds);
-
-        return unfold_binds(expr, binds);
+        pt->value.as_call.fn_subtree = rco_fn.atomic_pt;
+        binds = atomize_seq(pt->value.as_call.args_subtrees, binds);
+        return unfold_binds(pt, binds);
       }
     case PT_VECTOR:;
       {
-        binds = atomize_seq(expr->value.as_subtree_list, binds);
-        return unfold_binds(expr, binds);
+        binds = atomize_seq(pt->value.as_subtree_list, binds);
+        return unfold_binds(pt, binds);
       }
     case PT_UOP:;
       {
-        program_tree_t* operand = expr->value.as_uop.operand;
+        program_tree_t* operand = pt->value.as_uop.operand;
         rco_pair_t rco_operand = rco_atom(operand, binds);
         binds = rco_operand.mappings;
-
-        expr->value.as_uop.operand = rco_operand.atomic_pt;
-
-        return unfold_binds(expr, binds);
+        pt->value.as_uop.operand = rco_operand.atomic_pt;
+        return unfold_binds(pt, binds);
       }
     case PT_BINOP:;
       {
-        program_tree_t* lhs = expr->value.as_binop.lhs;
-        program_tree_t* rhs = expr->value.as_binop.rhs;
+        program_tree_t* lhs = pt->value.as_binop.lhs;
+        program_tree_t* rhs = pt->value.as_binop.rhs;
 
         rco_pair_t rco_lhs = rco_atom(lhs, binds);
         binds = rco_lhs.mappings;
         rco_pair_t rco_rhs = rco_atom(rhs, binds);
         binds = rco_rhs.mappings;
 
-        expr->value.as_binop.lhs = rco_lhs.atomic_pt;
-        expr->value.as_binop.rhs = rco_rhs.atomic_pt;
+        pt->value.as_binop.lhs = rco_lhs.atomic_pt;
+        pt->value.as_binop.rhs = rco_rhs.atomic_pt;
 
-        return unfold_binds(expr, binds);
+        return unfold_binds(pt, binds);
       }
     case PT_IF:;
       {
         rco_pair_t rco_cond =
-            rco_atom(expr->value.as_if_form.cond_subtree, binds);
+            rco_atom(pt->value.as_if_form.cond_subtree, binds);
         binds = rco_cond.mappings;
-
-        expr->value.as_if_form.cond_subtree = rco_cond.atomic_pt;
-
-        expr->value.as_if_form.t_branch_subtree =
-            to_mnf_expr(expr->value.as_if_form.t_branch_subtree);
-        expr->value.as_if_form.f_branch_subtree =
-            to_mnf_expr(expr->value.as_if_form.f_branch_subtree);
-
-        return unfold_binds(expr, binds);
+        pt->value.as_if_form.cond_subtree = rco_cond.atomic_pt;
+        return unfold_binds(pt, binds);
       }
-    case PT_TOPLEVEL:
-    case PT_ERROR:;
-      {
-        assert(false);
-        m_unreachable;
-      }
+    default:
+      break;
   }
+
+  return pt;
+}
+
+static program_tree_t* to_mnf_expr(program_tree_t* expr) {
+  return pt_fmap(expr, to_mnf_op);
 }
 
 program_tree_t* to_mnf_pass(program_tree_t* pt_toplevel) {
-  assert(pt_toplevel->kind == PT_TOPLEVEL);
-
-  array_ptr_t exprs = pt_toplevel->value.as_subtree_list;
-  size_t exprs_sz = array_size(exprs);
-
-  for (size_t i = 0; i < exprs_sz; i++) {
-    program_tree_t* e = array_data(program_tree_t*, exprs)[i];
-    array_data(program_tree_t*, exprs)[i] = to_mnf_expr(e);
-  }
-
-  return pt_toplevel;
+  return to_mnf_expr(pt_toplevel);
 }

@@ -46,7 +46,6 @@ static int dump_parser_errors_and_die_tail(program_tree_t* pt, int cnt) {
     case PT_BINOP:
       return cnt + dump_parser_errors_and_die_tail(pt->value.as_binop.lhs, 0) +
              dump_parser_errors_and_die_tail(pt->value.as_binop.rhs, 0);
-
     case PT_CALL:
       return cnt +
              dump_parser_errors_and_die_tail(pt->value.as_call.fn_subtree, 0) +
@@ -95,8 +94,8 @@ int main(int argc, char* argv[]) {
     return 1;
 
   program_tree_t* transformed =
-      to_mnf_pass(shrink_logic_operators_pass(register_pass(pt)));
-  pprint_pt(transformed);
+      to_mnf_pass(remove_logic_operators_pass(register_pass(pt)));
+  pt_pprint(transformed);
 
   shared_deinit();
 

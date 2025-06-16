@@ -178,6 +178,16 @@ program_tree_t* pt_make_vector(arena_ptr_t pt_arena,
                                loc_t loc,
                                array_ptr_t /* [program_tree_t*] */ elems);
 
-void pprint_pt(program_tree_t* pt);
+bool is_atomic(program_tree_t* expr);
+
+void pt_pprint(program_tree_t* pt);
+
+typedef program_tree_t* (*pt_fmap_op_t)(program_tree_t*);
+
+typedef void (*pt_fmap_action_t)(program_tree_t*);
+
+program_tree_t* pt_fmap(program_tree_t* pt, pt_fmap_op_t op);
+
+void pt_fmap_(program_tree_t* pt, pt_fmap_action_t action);
 
 #endif

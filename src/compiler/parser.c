@@ -1,5 +1,7 @@
 #pragma clang diagnostic ignored "-Wformat-security"
 
+// TODO: make all parse_* return early if on any stages error was parsed
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -508,15 +510,23 @@ static program_tree_t* parse_binop(env_table_t env, token_kind_t closing) {
       [SPEC_GE] = BINOP_GE,    [SPEC_GT] = BINOP_GT,
       [SPEC_EQ] = BINOP_EQ,    [SPEC_NEQ] = BINOP_NEQ};
 
-  program_tree_t* lhs = parse_expr(env, false);
-  program_tree_t* rhs = parse_expr(env, false);
+  do {
+    program_tree_t* lhs = parse_expr(env, false);
+    if (lhs->kind == PT_ERROR)
+      break;
+    program_tree_t* rhs = parse_expr(env, false);
+    if (rhs->kind == PT_ERROR)
+      break;
+    token_t paren_c = parser_next_token_consume();
+    if (paren_c.kind != closing)
+      break;
 
-  token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != closing)
-    return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
+    return pt_make_binop(g_pt_arena, loc,
+                         spec_to_binop[op_tk.value.as_special_atom], lhs, rhs);
 
-  return pt_make_binop(g_pt_arena, loc,
-                       spec_to_binop[op_tk.value.as_special_atom], lhs, rhs);
+  } while (false);
+
+  return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 }
 
 static program_tree_t* parse_if(env_table_t env, token_kind_t closing) {
@@ -526,15 +536,25 @@ static program_tree_t* parse_if(env_table_t env, token_kind_t closing) {
   assert(if_tk.kind == TK_SPECIAL_ATOM &&
          if_tk.value.as_special_atom == SPEC_IF);
 
-  program_tree_t* cond = parse_expr(env, false);
-  program_tree_t* t_branch = parse_expr(env, false);
-  program_tree_t* f_branch = parse_expr(env, false);
+  do {
+    program_tree_t* cond = parse_expr(env, false);
+    if (cond->kind == PT_ERROR)
+      break;
+    program_tree_t* t_branch = parse_expr(env, false);
+    if (t_branch->kind == PT_ERROR)
+      break;
+    program_tree_t* f_branch = parse_expr(env, false);
+    if (f_branch->kind == PT_ERROR)
+      break;
 
-  token_t paren_c = parser_next_token_consume();
-  if (paren_c.kind != closing)
-    return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
+    token_t paren_c = parser_next_token_consume();
+    if (paren_c.kind != closing)
+      break;
 
-  return pt_make_if(g_pt_arena, loc, cond, t_branch, f_branch);
+    return pt_make_if(g_pt_arena, loc, cond, t_branch, f_branch);
+  } while (false);
+
+  return pt_error_at(g_pt_arena, g_str_arena, loc, MALFORMED_FORM_FMT);
 }
 
 static program_tree_t* parse_let(env_table_t env, token_kind_t closing) {

@@ -1,12 +1,11 @@
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdnoreturn.h>
 #include "arena.h"
-#include "array.h"
 #include "error.h"
 #include "globals_table.h"
-#include "macros.h"
 #include "parser.h"
 #include "shared.h"
 #include "vector.h"
@@ -78,56 +77,8 @@ void shared_deinit() {
 static vector_ptr_t g_register_lambdas_acc;
 static vector_ptr_t g_register_strings_acc;
 
-static void register_rec(program_tree_t* pt);
-
-static void register_seq(array_ptr_t /* [program_tree_t*] */ subtrees) {
-  for (size_t i = 0; i < array_size(subtrees); i++)
-    register_rec(array_data(program_tree_t*, subtrees)[i]);
-}
-
-static void register_rec(program_tree_t* pt) {
+void register_action(program_tree_t* pt) {
   switch (pt->kind) {
-    case PT_BOOL_LITERAL:
-    case PT_INT_LITERAL:
-    case PT_NAME:
-    case PT_GLOBAL_SYMBOL:
-    case PT_ERROR:
-      return;
-    case PT_LET:;
-      {
-        register_rec(pt->value.as_let_form.bind.value_subtree);
-        register_rec(pt->value.as_let_form.expr_subtree);
-        return;
-      }
-    case PT_UOP:;
-      {
-        register_rec(pt->value.as_uop.operand);
-        return;
-      }
-    case PT_BINOP:;
-      {
-        register_rec(pt->value.as_binop.lhs);
-        register_rec(pt->value.as_binop.rhs);
-        return;
-      }
-    case PT_CALL:;
-      {
-        register_rec(pt->value.as_call.fn_subtree);
-        register_seq(pt->value.as_call.args_subtrees);
-        return;
-      }
-    case PT_VECTOR:;
-      {
-        register_seq(pt->value.as_subtree_list);
-        return;
-      }
-    case PT_IF:;
-      {
-        register_rec(pt->value.as_if_form.cond_subtree);
-        register_rec(pt->value.as_if_form.t_branch_subtree);
-        register_rec(pt->value.as_if_form.f_branch_subtree);
-        return;
-      }
     case PT_STR_LITERAL:;
       {
         pt->value.as_str_literal.id = next_str_id();
@@ -140,14 +91,10 @@ static void register_rec(program_tree_t* pt) {
         pt->value.as_lambda.id = next_lambda_id();
         g_register_lambdas_acc = vector_push_back(
             pt_lambda_t, g_register_lambdas_acc, pt->value.as_lambda);
-        register_rec(pt->value.as_lambda.body_subtree);
         return;
       }
-    case PT_TOPLEVEL:;
-      {
-        assert(false);
-        m_unreachable;
-      }
+    default:
+      return;
   }
 }
 
@@ -164,11 +111,10 @@ int next_lambda_id() {
 }
 
 void register_stuff(program_tree_t* pt_toplevel) {
-  assert(pt_toplevel->kind == PT_TOPLEVEL);
-
   g_register_lambdas_acc = vector_make(pt_lambda_t, error_buf);
   g_register_strings_acc = vector_make(pt_str_literal_t, error_buf);
-  register_seq(pt_toplevel->value.as_subtree_list);
+
+  pt_fmap_(pt_toplevel, register_action);
 
   g_lambdas = (pt_lambda_t*)malloc(vector_size(g_register_lambdas_acc) *
                                    sizeof(pt_lambda_t));
