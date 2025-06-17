@@ -5,7 +5,6 @@
 #include "array.h"
 #include "codegen.h"
 #include "defs.h"
-#include "error.h"
 #include "parser.h"
 #include "passes.h"
 #include "program_tree.h"
@@ -77,10 +76,6 @@ static bool dump_parser_errors_and_die_check(program_tree_t* pt) {
   }
 
   return false;
-}
-
-void error_arena_alloc() {
-  error("Arena allocation error\n");
 }
 
 int main(int argc, char* argv[]) {
