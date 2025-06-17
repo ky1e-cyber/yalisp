@@ -181,29 +181,47 @@ static void dump_qbe_binop(pt_binop_t binop, int dest) {
       [BINOP_GE] = "csgel", [BINOP_GT] = "csgtl", [BINOP_LE] = "cslel",
       [BINOP_LT] = "csltl"};
 
-  dump_qbe_typecheck(binop.lhs, type_int);
-  dump_qbe_typecheck(binop.rhs, type_int);
-
-  const int tmp_lhs_id = next_name_id();
-  dump_qbe_deflag(binop.lhs, tmp_lhs_id);
-  const int tmp_rhs_id = next_name_id();
-  dump_qbe_deflag(binop.rhs, tmp_rhs_id);
-
-  const int tmp_res_id = next_name_id();
-  printf("  %s%s %%v%d, %%v%d\n", make_asign_dest(tmp_res_id),
-         ops_to_instrs[binop.op], tmp_lhs_id, tmp_rhs_id);
+  type_t t = type_bool;
 
   switch (binop.op) {
     case BINOP_EQ:
-    case BINOP_NEQ:
+    case BINOP_NEQ:;
+      {
+        const int tmp_res_id = next_name_id();
+        printf("  %s%s ", make_asign_dest(tmp_res_id), ops_to_instrs[binop.op]);
+        printf("%s, ", make_repr(binop.lhs));
+        printf("%s\n", make_repr(binop.rhs));
+        dump_qbe_flag(tmp_res_id, tmp_res_id, type_bool);
+        printf("  %sadd 0, %%v%d\n", make_asign_dest(dest), tmp_res_id);
+        return;
+      }
+    default:;
+      {
+        t = type_int;
+      }
     case BINOP_GE:
     case BINOP_GT:
     case BINOP_LE:
     case BINOP_LT:;
       {
-        dump_qbe_flag(tmp_res_id, tmp_res_id, type_bool);
+        dump_qbe_typecheck(binop.lhs, type_int);
+        dump_qbe_typecheck(binop.rhs, type_int);
+
+        const int tmp_lhs_id = next_name_id();
+        dump_qbe_deflag(binop.lhs, tmp_lhs_id);
+        const int tmp_rhs_id = next_name_id();
+        dump_qbe_deflag(binop.rhs, tmp_rhs_id);
+
+        const int tmp_res_id = next_name_id();
+        printf("  %s%s %%v%d, %%v%d\n", make_asign_dest(tmp_res_id),
+               ops_to_instrs[binop.op], tmp_lhs_id, tmp_rhs_id);
+
+        dump_qbe_flag(tmp_res_id, tmp_res_id, t);
+
+        printf("  %sadd 0, %%v%d\n", make_asign_dest(dest), tmp_res_id);
         break;
       }
+
     case BINOP_COUNT__:
     case BINOP_AND:
     case BINOP_OR:;
@@ -211,14 +229,7 @@ static void dump_qbe_binop(pt_binop_t binop, int dest) {
         assert(false);
         m_unreachable;
       }
-    default:;
-      {
-        dump_qbe_flag(tmp_res_id, tmp_res_id, type_int);
-        break;
-      }
   }
-
-  printf("  %sadd 0, %%v%d\n", make_asign_dest(dest), tmp_res_id);
 }
 
 static void dump_qbe_if(pt_if_form_t if_form, int dest) {
