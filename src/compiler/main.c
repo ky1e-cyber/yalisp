@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
   shared_init(STR_ARENA_SIZE, PT_ARENA_SIZE, GLOBALS_ARENA_SIZE,
               ENV_ARENA_SIZE);
   program_tree_t* pt = parse(src_path);
-  
+
   if (dump_parser_errors_and_die_check(pt))
     return 1;
 

@@ -2,4 +2,4 @@
   [vec (vector (lambda [x y] (+ x y)) 42 (vector))]
   (let
     [f (vector-ref vec 0)]
-    (f 42 ~42)))
+    (print (f 489 ~69))))

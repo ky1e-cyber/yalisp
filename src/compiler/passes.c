@@ -80,7 +80,6 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
     case PT_BOOL_LITERAL:
     case PT_INT_LITERAL:
     case PT_NAME:
-    case PT_GLOBAL_SYMBOL:
       return (rco_pair_t){.atomic_pt = expr, .mappings = acc};
     case PT_LAMBDA:;
       {
@@ -103,7 +102,7 @@ static rco_pair_t rco_atom(program_tree_t* expr, vector_ptr_t acc) {
         value = let_mnf;
         break;
       }
-
+    case PT_GLOBAL_SYMBOL:
     case PT_STR_LITERAL:
     case PT_CALL:
     case PT_UOP:

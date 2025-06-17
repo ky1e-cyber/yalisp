@@ -2,6 +2,6 @@
   [hello "Hello, World!"]
   (let
     [f (lambda [g] (g hello))]
-    (f println)))
+    (f print-string)))
 
 0

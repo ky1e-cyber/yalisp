@@ -78,11 +78,6 @@ static char* make_repr(program_tree_t* pt_atomic) {
         snprintf(repr_buf, repr_buf_sz, "%%v%d", pt_atomic->value.as_name_id);
         break;
       }
-    case PT_GLOBAL_SYMBOL:;
-      {
-        snprintf(repr_buf, repr_buf_sz, "$%s", pt_atomic->value.as_symbol);
-        break;
-      }
     default:;
       {
         assert(false);
@@ -139,9 +134,14 @@ static void dump_qbe_name(int id, int dest) {
   printf("add 0, %%v%d\n", id);
 }
 
+static void dump_qbe_rc_decr(int var) {
+  printf("  call $yalisp_rt_rc_decr(l %%v%d)\n", var);
+}
+
 static void dump_qbe_let(pt_let_form_t let, int dest) {
   dump_qbe_expr(let.bind.value_subtree, let.bind.name_id);
   dump_qbe_expr(let.expr_subtree, dest);
+  dump_qbe_rc_decr(let.bind.name_id);
 }
 
 static void dump_qbe_uop(pt_uop_t uop, int dest) {
@@ -250,13 +250,20 @@ static void dump_qbe_if(pt_if_form_t if_form, int dest) {
 
 static void dump_qbe_vector(array_ptr_t elems, int dest) {
   size_t elems_sz = array_size(elems);
+
+  int alloc_id = next_name_id();
+  printf("  %salloc8 %lu\n", make_asign_dest(alloc_id), elems_sz * 8);
+
+  int nxt = alloc_id;
+  for (size_t i = 0; i < elems_sz; i++) {
+    printf("  storel %s, %%v%d\n",
+           make_repr(array_data(program_tree_t*, elems)[i]), nxt);
+    nxt = next_name_id();
+    printf("  %sadd %%v%d, %lu\n", make_asign_dest(nxt), alloc_id, (i + 1) * 8);
+  }
+
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_builtin_make_vector(l %lu", elems_sz);
-
-  for (size_t i = 0; i < elems_sz; i++)
-    printf(", l %s", make_repr(array_data(program_tree_t*, elems)[i]));
-
-  printf(")\n");
+  printf("call $yalisp_rt_make_vector(l %lu, l %%v%d)\n", elems_sz, alloc_id);
 }
 
 static void dump_qbe_str(int id, int dest) {
@@ -267,13 +274,18 @@ static void dump_qbe_str(int id, int dest) {
 static void dump_qbe_names_vector(array_ptr_t ids, int dest) {
   size_t ids_sz = array_size(ids);
 
+  int alloc_id = next_name_id();
+  printf("  %salloc8 %lu\n", make_asign_dest(alloc_id), ids_sz * 8);
+
+  int nxt = alloc_id;
+  for (size_t i = 0; i < ids_sz; i++) {
+    printf("  storel %%v%d, %%v%d\n", array_data(int, ids)[i], nxt);
+    nxt = next_name_id();
+    printf("  %sadd %%v%d, %lu\n", make_asign_dest(nxt), alloc_id, i + 1);
+  }
+
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_builtin_make_vector(l %lu", ids_sz);
-
-  for (size_t i = 0; i < ids_sz; i++)
-    printf(", l %%v%d", array_data(int, ids)[i]);
-
-  printf(")\n");
+  printf("call $yalisp_rt_make_vector(l %lu, l %%v%d)\n", ids_sz, alloc_id);
 }
 
 static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
@@ -282,7 +294,8 @@ static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
   dump_qbe_names_vector(lambda.captured, env_tmp_id);
 
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_rt_make_lambda(l %d, l %%v%d)\n", lambda.id, env_tmp_id);
+  printf("call $yalisp_rt_make_lambda(l $lambda%d, l %%v%d)\n", lambda.id,
+         env_tmp_id);
 }
 
 static void dump_qbe_call(pt_call_t call, int dest) {
@@ -298,7 +311,7 @@ static void dump_qbe_call(pt_call_t call, int dest) {
 
 static void dump_qbe_global(char* symbol, int dest) {
   printf("  %s", make_asign_dest(dest));
-  printf("add 0, $%s\n", symbol);
+  printf("loadl $%s\n", symbol);
 }
 
 static void dump_qbe_lambda_impl(pt_lambda_t lambda) {

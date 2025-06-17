@@ -10,7 +10,7 @@
 #include "shared.h"
 #include "vector.h"
 
-const char* g_stdlib_builtin_globals[] = {"print", "println", "read-int",
+const char* g_stdlib_builtin_globals[] = {"print", "print-string", "read-int",
                                           "vector-ref", "vector-length"};
 const size_t g_stdlib_builtin_globals_sz =
     sizeof(g_stdlib_builtin_globals) / sizeof(char*);
