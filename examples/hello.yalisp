@@ -1,0 +1,7 @@
+(let
+  [hello "Hello, World!"]
+  (let
+    [f (lambda [g] (g hello))]
+    (f println)))
+
+0
