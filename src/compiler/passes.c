@@ -12,6 +12,25 @@ static noreturn void error_pass_buf() {
   error("Allocation failure in buffer for transformation passes\n");
 }
 
+static void rename_global(char* symbol) {
+  size_t l = strlen(symbol);
+
+  for (size_t i = 0; i < l; i++) {
+    if (symbol[i] == '-')
+      symbol[i] = '_';
+  }
+}
+
+static void rename_globals_action(program_tree_t* pt) {
+  if (pt->kind == PT_GLOBAL_SYMBOL)
+    rename_global(pt->value.as_symbol);
+}
+
+program_tree_t* rename_globals_pass(program_tree_t* pt_toplevel) {
+  pt_fmap_(pt_toplevel, rename_globals_action);
+  return pt_toplevel;
+}
+
 program_tree_t* register_pass(program_tree_t* pt_toplevel) {
   register_stuff(pt_toplevel);
   return pt_toplevel;

@@ -282,15 +282,6 @@ static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
          env_tmp_id);
 }
 
-static void rename_global(char* symbol) {
-  size_t l = strlen(symbol);
-
-  for (size_t i = 0; i < l; i++) {
-    if (symbol[i] == '-')
-      symbol[i] = '_';
-  }
-}
-
 static void dump_qbe_call(pt_call_t call, int dest) {
   int args_id = next_name_id();
 
@@ -303,7 +294,6 @@ static void dump_qbe_call(pt_call_t call, int dest) {
 }
 
 static void dump_qbe_global(char* symbol, int dest) {
-  rename_global(symbol);
   printf("  %s", make_asign_dest(dest));
   printf("add 0, $%s\n", symbol);
 }

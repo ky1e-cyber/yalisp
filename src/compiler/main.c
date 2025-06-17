@@ -94,10 +94,8 @@ int main(int argc, char* argv[]) {
   if (dump_parser_errors_and_die_check(pt))
     return 1;
 
-  program_tree_t* transformed =
-      register_pass(to_mnf_pass(remove_logic_operators_pass(pt)));
-
-  printf("\n");
+  program_tree_t* transformed = register_pass(
+      rename_globals_pass(to_mnf_pass(remove_logic_operators_pass(pt))));
 
   dump_qbe(transformed);
 
