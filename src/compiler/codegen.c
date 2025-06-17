@@ -175,16 +175,23 @@ static void dump_qbe_flag(int dest, int src, type_t t) {
 }
 
 static void dump_qbe_binop(pt_binop_t binop, int dest) {
-  static const char* ops_to_builtin[] = {
-      [BINOP_SUM] = "yalisp_builtin_add",
-      [BINOP_SUB] = "yalisp_builtin_sub",
-      [BINOP_MUL] = "yalisp_builtin_mul",
-      [BINOP_DIV] = "yalisp_builtin_div",
-  };
-
   static const char* ops_to_instrs[] = {
-      [BINOP_EQ] = "ceql",  [BINOP_NEQ] = "cnel", [BINOP_GE] = "csgel",
-      [BINOP_GT] = "csgtl", [BINOP_LE] = "cslel", [BINOP_LT] = "csltl"};
+      [BINOP_SUM] = "add",  [BINOP_SUB] = "sub",  [BINOP_MUL] = "mul",
+      [BINOP_DIV] = "div",  [BINOP_EQ] = "ceql",  [BINOP_NEQ] = "cnel",
+      [BINOP_GE] = "csgel", [BINOP_GT] = "csgtl", [BINOP_LE] = "cslel",
+      [BINOP_LT] = "csltl"};
+
+  dump_qbe_typecheck(binop.lhs, type_int);
+  dump_qbe_typecheck(binop.rhs, type_int);
+
+  const int tmp_lhs_id = next_name_id();
+  dump_qbe_deflag(binop.lhs, tmp_lhs_id);
+  const int tmp_rhs_id = next_name_id();
+  dump_qbe_deflag(binop.rhs, tmp_rhs_id);
+
+  const int tmp_res_id = next_name_id();
+  printf("  %s%s %%v%d, %%v%d\n", make_asign_dest(tmp_res_id),
+         ops_to_instrs[binop.op], tmp_lhs_id, tmp_rhs_id);
 
   switch (binop.op) {
     case BINOP_EQ:
@@ -194,21 +201,8 @@ static void dump_qbe_binop(pt_binop_t binop, int dest) {
     case BINOP_LE:
     case BINOP_LT:;
       {
-        dump_qbe_typecheck(binop.lhs, type_int);
-        dump_qbe_typecheck(binop.rhs, type_int);
-
-        const int tmp_lhs_id = next_name_id();
-        dump_qbe_deflag(binop.lhs, tmp_lhs_id);
-        const int tmp_rhs_id = next_name_id();
-        dump_qbe_deflag(binop.rhs, tmp_rhs_id);
-
-        const int tmp_res_id = next_name_id();
-        printf("  %s%s %%v%d, %%v%d\n", make_asign_dest(tmp_res_id),
-               ops_to_instrs[binop.op], tmp_lhs_id, tmp_rhs_id);
         dump_qbe_flag(tmp_res_id, tmp_res_id, type_bool);
-        printf("  %sadd 0, %%v%d\n", make_asign_dest(dest), tmp_res_id);
-
-        return;
+        break;
       }
     case BINOP_COUNT__:
     case BINOP_AND:
@@ -217,15 +211,14 @@ static void dump_qbe_binop(pt_binop_t binop, int dest) {
         assert(false);
         m_unreachable;
       }
-    default:
-      break;
+    default:;
+      {
+        dump_qbe_flag(tmp_res_id, tmp_res_id, type_int);
+        break;
+      }
   }
 
-  dump_qbe_typecheck(binop.lhs, type_int);
-  dump_qbe_typecheck(binop.rhs, type_int);
-  printf("  %scall $%s", make_asign_dest(dest), ops_to_builtin[binop.op]);
-  printf("(l %s, ", make_repr(binop.lhs));
-  printf("l %s)\n", make_repr(binop.rhs));
+  printf("  %sadd 0, %%v%d\n", make_asign_dest(dest), tmp_res_id);
 }
 
 static void dump_qbe_if(pt_if_form_t if_form, int dest) {
@@ -257,7 +250,7 @@ static void dump_qbe_vector(array_ptr_t elems, int dest) {
 
 static void dump_qbe_str(int id, int dest) {
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_builtin_make_str(l $s%d)\n", id);
+  printf("call $yalisp_rt_make_str(l $s%d)\n", id);
 }
 
 static void dump_qbe_names_vector(array_ptr_t ids, int dest) {
@@ -278,8 +271,7 @@ static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
   dump_qbe_names_vector(lambda.captured, env_tmp_id);
 
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_builtin_make_lambda(l %d, l %%v%d)\n", lambda.id,
-         env_tmp_id);
+  printf("call $yalisp_rt_make_lambda(l %d, l %%v%d)\n", lambda.id, env_tmp_id);
 }
 
 static void dump_qbe_call(pt_call_t call, int dest) {
@@ -289,8 +281,8 @@ static void dump_qbe_call(pt_call_t call, int dest) {
 
   dump_qbe_typecheck(call.fn_subtree, type_ptr);
   printf("  %s", make_asign_dest(dest));
-  printf("call $yalisp_builtin_call(l %s, l %%v%d)\n",
-         make_repr(call.fn_subtree), args_id);
+  printf("call $yalisp_rt_call(l %s, l %%v%d)\n", make_repr(call.fn_subtree),
+         args_id);
 }
 
 static void dump_qbe_global(char* symbol, int dest) {
@@ -306,11 +298,11 @@ static void dump_qbe_lambda_impl(pt_lambda_t lambda) {
       lambda.id, type_void);
 
   for (size_t i = 0; i < array_size(lambda.captured); i++)
-    printf("  %%v%d =l call $yalisp_builtin_vector_get(l %%env, l %lu)\n",
+    printf("  %%v%d =l call $yalisp_rt_vector_get(l %%env, l %lu)\n",
            array_data(int, lambda.captured)[i], i);
 
   for (size_t i = 0; i < array_size(lambda.params); i++)
-    printf("  %%v%d =l call $yalisp_builtin_vector_get(l %%args, l %lu)\n",
+    printf("  %%v%d =l call $yalisp_rt_vector_get(l %%args, l %lu)\n",
            array_data(int, lambda.params)[i], i);
 
   dump_qbe_expr(lambda.body_subtree, 0);
@@ -419,7 +411,23 @@ static void dump_qbe_main_body(program_tree_t* pt_toplevel) {
   printf("%s", main_end);
 }
 
+static void dump_qbe_builtins() {
+  static char* vector_make_s =
+      "function l $yalisp_builtin_make_vector(l %sz, ...) {\n"
+      "@start\n"
+      "  %n =l shl %sz, 3\n"
+      "  %ap =l alloc8 %n\n"
+      "  vastart %ap\n"
+      "  %vec =l call $yalisp_rt_make_vector(l %sz, l %ap)\n"
+      "  ret %vec\n"
+      "}\n\n";
+
+  printf("%s", vector_make_s);
+}
+
 void dump_qbe(program_tree_t* pt_toplevel) {
+  dump_qbe_builtins();
+
   for (int i = 0; i < g_str_cnt; i++)
     printf("data $s%d = { b \"%s\", b 0}\n\n", g_str_literals[i].id,
            g_str_literals[i].cstr);
