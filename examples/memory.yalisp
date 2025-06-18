@@ -1,0 +1,13 @@
+(let
+  [vec1
+    (vector
+      42
+      (vector 690 ~1)
+      (vector 55 "string in vector" print))]
+  (let
+    [vec2
+      (vector
+        ((lambda () (print (vector-ref vec1 0))))
+        (print (vector-ref (vector-ref vec1 1) 1))
+        (vector-ref (vector-ref vec1 2) 1))]
+    (print-string (vector-ref vec2 2))))
