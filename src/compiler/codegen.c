@@ -284,8 +284,6 @@ static void dump_qbe_call(pt_call_t call, int dest) {
   printf("  %%v%d =l call $yalisp_rt_call(l %s, l %%v%d)\n", dest,
          make_repr(call.fn_subtree), args_id);
 
-  dump_qbe_rc_incr(dest);
-
   dump_qbe_rc_decr(args_id);
 }
 
@@ -297,7 +295,7 @@ static void dump_qbe_lambda_impl(pt_lambda_t lambda) {
   printf(
       "function l $lambda%d(l %%env, l %%args) {\n"
       "@start\n"
-      "  %%r =l add 0, %u\n",
+      "  %%v0 =l add 0, %u\n",
       lambda.id, type_void);
 
   for (size_t i = 0; i < array_size(lambda.captured); i++)
@@ -310,7 +308,7 @@ static void dump_qbe_lambda_impl(pt_lambda_t lambda) {
 
   dump_qbe_expr(lambda.body_subtree, 0);
 
-  printf("  ret %%r\n}\n");
+  printf("  ret %%v0\n}\n");
 }
 
 static void dump_qbe_expr(program_tree_t* pt_expr, int dest) {
@@ -384,9 +382,11 @@ static void dump_qbe_main_body(program_tree_t* pt_toplevel) {
   static char* main_header =
       "export function w $main() {\n"
       "@start\n"
-      "  call $yalisp_rt_init()\n";
+      "  call $yalisp_rt_init()\n"
+      "  %v0 =l add 0, 0\n";
 
   static char* main_end =
+      "  call $yalisp_rt_rc_decr(l %v0)\n"
       "  ret 0\n"
       "}\n";
 
