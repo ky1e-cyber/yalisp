@@ -307,6 +307,8 @@ static void dump_qbe_call(pt_call_t call, int dest) {
   printf("  %s", make_asign_dest(dest));
   printf("call $yalisp_rt_call(l %s, l %%v%d)\n", make_repr(call.fn_subtree),
          args_id);
+
+  dump_qbe_rc_decr(args_id);
 }
 
 static void dump_qbe_global(char* symbol, int dest) {
