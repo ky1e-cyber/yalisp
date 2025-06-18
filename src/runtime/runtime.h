@@ -45,6 +45,8 @@ void yalisp_rt_panic(char* msg);
 
 void yalisp_rt_typcheck(intptr_t p, uint64_t t);
 
+void yalisp_rt_rc_incr(intptr_t p);
+
 void yalisp_rt_rc_decr(intptr_t p);
 
 void yalisp_rt_init();

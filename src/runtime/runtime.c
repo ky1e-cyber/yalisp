@@ -71,6 +71,13 @@ static void rc_decr(object_t* obj) {
   rt_release(obj);
 }
 
+void yalisp_rt_rc_incr(intptr_t p) {
+  if (get_type(p) != type_ptr)
+    return;
+
+  rc_incr((object_t*)detag_ptr(p));
+}
+
 void yalisp_rt_rc_decr(intptr_t p) {
   if (get_type(p) != type_ptr)
     return;
