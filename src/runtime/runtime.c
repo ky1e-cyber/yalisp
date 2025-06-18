@@ -113,7 +113,7 @@ intptr_t yalisp_rt_make_vector(uint64_t sz, intptr_t* data) {
   }
 
   *vec_obj = (object_t){.kind = OBJ_VEC,
-                        .rc = 1,
+                        .rc = 0,
                         .value.as_vector = {.sz = sz, .data = vec_data}};
 
   return tag_ptr((uint64_t*)vec_obj);
@@ -121,22 +121,25 @@ intptr_t yalisp_rt_make_vector(uint64_t sz, intptr_t* data) {
 
 intptr_t yalisp_rt_make_str(char* s) {
   object_t* str_obj = rt_alloc_object();
-  *str_obj = (object_t){.kind = OBJ_STR, .rc = 1, .value.as_cstr = s};
+  *str_obj = (object_t){.kind = OBJ_STR, .rc = 0, .value.as_cstr = s};
 
   return tag_ptr((uint64_t*)str_obj);
 }
 
 intptr_t yalisp_rt_make_lambda(lambda_impl_ptr_t lp, intptr_t env) {
+  yalisp_rt_rc_incr(env);
   object_t* lambda_obj = rt_alloc_object();
 
   *lambda_obj =
       (object_t){.kind = OBJ_LAMBDA,
-                 .rc = 1,
+                 .rc = 0,
                  .value.as_lambda = {.lambda_impl = lp, .env_vector_ptr = env}};
   return tag_ptr((uint64_t*)lambda_obj);
 }
 
 intptr_t yalisp_rt_call(intptr_t fn, intptr_t args_vec) {
+  yalisp_rt_rc_incr(args_vec);
+
   object_t* fn_obj = (object_t*)detag_ptr(fn);
   if (fn_obj->kind != OBJ_LAMBDA)
     yalisp_rt_panic("Trying to apply non-lambda object");
