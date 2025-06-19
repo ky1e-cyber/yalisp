@@ -79,7 +79,7 @@ static void dump_qbe_typecheck(program_tree_t* operand, type_t t) {
       {
         if (kinds_map[operand->kind] != t) {
           printf(
-              "  call $yalisp_rt_panic(l $yalisp_rt_tymismatch_s) "
+              "  call $yalisp_rt_typcheck_panic() "
               "# typecheck failed\n");
         }
         break;
@@ -108,10 +108,6 @@ static void dump_qbe_prim_literals(program_tree_t* pt_lit, int dest) {
   printf("\n");
 }
 
-static void dump_qbe_name(int id, int dest) {
-  printf("  %%v%d =l add 0, %%v%d\n", dest, id);
-}
-
 static void dump_qbe_rc_incr(int var) {
   printf("  call $yalisp_rt_rc_incr(l %%v%d)\n", var);
 }
@@ -120,9 +116,13 @@ static void dump_qbe_rc_decr(int var) {
   printf("  call $yalisp_rt_rc_decr(l %%v%d)\n", var);
 }
 
+static void dump_qbe_name(int id, int dest) {
+  printf("  %%v%d =l add 0, %%v%d\n", dest, id);
+  dump_qbe_rc_incr(dest);
+}
+
 static void dump_qbe_let(pt_let_form_t let, int dest) {
   dump_qbe_expr(let.bind.value_subtree, let.bind.name_id);
-  dump_qbe_rc_incr(let.bind.name_id);
   dump_qbe_expr(let.expr_subtree, dest);
   dump_qbe_rc_decr(let.bind.name_id);
 }
@@ -145,7 +145,7 @@ static void dump_qbe_uop(pt_uop_t uop, int dest) {
 }
 
 static void dump_qbe_deflag_value(program_tree_t* operand, int dest) {
-  printf("  %%v%d =l shr %s, 3 # detag\n", dest, make_repr(operand));
+  printf("  %%v%d =l sar %s, 3 # detag\n", dest, make_repr(operand));
 }
 
 static void dump_qbe_flag_value(int dest, int src, type_t t) {
@@ -264,6 +264,7 @@ static void dump_qbe_names_vector(array_ptr_t ids, int dest) {
 
   printf("  %%v%d =l call $yalisp_rt_make_vector(l %lu, l %%v%d)\n", dest,
          ids_sz, alloc_id);
+
 }
 
 static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
@@ -273,6 +274,7 @@ static void dump_qbe_lambda(pt_lambda_t lambda, int dest) {
 
   printf("  %%v%d =l call $yalisp_rt_make_lambda(l $lambda%d, l %%v%d)\n", dest,
          lambda.id, env_tmp_id);
+
 }
 
 static void dump_qbe_call(pt_call_t call, int dest) {
@@ -295,8 +297,15 @@ static void dump_qbe_lambda_impl(pt_lambda_t lambda) {
   printf(
       "function l $lambda%d(l %%env, l %%args) {\n"
       "@start\n"
+      "  %%args_cnt =l call $yalisp_rt_vector_length(l %%args)\n"
+      "  %%c =l ceql %%args_cnt, %lu\n"
+      "  jnz %%c, @args_checked, @args_mismatch\n"
+      "@args_mismatch\n"
+      "  call $yalisp_rt_argsmismatch_panic()\n"
+      "  ret %u\n"
+      "@args_checked\n"
       "  %%v0 =l add 0, %u\n",
-      lambda.id, type_void);
+      lambda.id, array_size(lambda.params), type_void, type_void);
 
   for (size_t i = 0; i < array_size(lambda.captured); i++)
     printf("  %%v%d =l call $yalisp_rt_vector_get(l %%env, l %lu)\n",
@@ -317,7 +326,12 @@ static void dump_qbe_expr(program_tree_t* pt_expr, int dest) {
     case PT_INT_LITERAL:;
       {
         dump_qbe_prim_literals(pt_expr, dest);
-        break;
+        return;
+      }
+    case PT_CALL:;
+      {
+        dump_qbe_call(pt_expr->value.as_call, dest);
+        return;
       }
     case PT_NAME:;
       {
@@ -357,11 +371,6 @@ static void dump_qbe_expr(program_tree_t* pt_expr, int dest) {
     case PT_LAMBDA:;
       {
         dump_qbe_lambda(pt_expr->value.as_lambda, dest);
-        break;
-      }
-    case PT_CALL:;
-      {
-        dump_qbe_call(pt_expr->value.as_call, dest);
         break;
       }
     case PT_GLOBAL_SYMBOL:;

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "stdnoreturn.h"
 
 typedef enum {
   type_ptr = 0b001u,
@@ -35,13 +36,13 @@ typedef struct {
   } value;
 } object_t;
 
-extern char* yalisp_rt_tymismatch_s;
-
 void* rt_alloc(size_t sz);
 
 void rt_release(void* p);
 
-void yalisp_rt_panic(char* msg);
+void noreturn yalisp_rt_typcheck_panic();
+
+void noreturn yalisp_rt_argsmismatch_panic();
 
 void yalisp_rt_typcheck(intptr_t p, uint64_t t);
 
@@ -59,6 +60,8 @@ intptr_t yalisp_rt_make_lambda(lambda_impl_ptr_t lp, intptr_t env);
 
 intptr_t yalisp_rt_call(intptr_t fn, intptr_t args_vec);
 
+uint64_t yalisp_rt_vector_length(intptr_t vec);
+
 intptr_t yalisp_rt_vector_get(intptr_t vec, uint64_t i);
 
 extern intptr_t print;
@@ -70,5 +73,7 @@ extern intptr_t read_int;
 extern intptr_t vector_ref;
 
 extern intptr_t vector_length;
+
+extern intptr_t panic;
 
 #endif

@@ -22,16 +22,26 @@ static intptr_t tag_ptr(uint64_t* ptr) {
   return (intptr_t)ptr | 1;
 }
 
-char* yalisp_rt_tymismatch_s = "Type error";
+static char* tymismatch_s = "Type error";
 
-void noreturn yalisp_rt_panic(char* msg) {
+static char* argsmismatch_s = "Call with wrong amount of arguments";
+
+static void noreturn rt_panic(char* msg) {
   fprintf(stderr, "PANIC: %s\n", msg);
   exit(1);
 }
 
+void noreturn yalisp_rt_typcheck_panic() {
+  rt_panic(tymismatch_s);
+}
+
+void noreturn yalisp_rt_argsmismatch_panic() {
+  rt_panic(argsmismatch_s);
+}
+
 void yalisp_rt_typcheck(intptr_t p, uint64_t t) {
   if (get_type(p) != (type_t)t)
-    yalisp_rt_panic(yalisp_rt_tymismatch_s);
+    rt_panic(tymismatch_s);
 }
 
 static void rc_decr(object_t* obj);
@@ -88,7 +98,7 @@ void yalisp_rt_rc_decr(intptr_t p) {
 void* rt_alloc(size_t sz) {
   void* mem = malloc(sz);
   if (!mem)
-    yalisp_rt_panic("Out of memory");
+    rt_panic("Out of memory");
 
   return mem;
 }
@@ -113,7 +123,7 @@ intptr_t yalisp_rt_make_vector(uint64_t sz, intptr_t* data) {
   }
 
   *vec_obj = (object_t){.kind = OBJ_VEC,
-                        .rc = 0,
+                        .rc = 1,
                         .value.as_vector = {.sz = sz, .data = vec_data}};
 
   return tag_ptr((uint64_t*)vec_obj);
@@ -121,7 +131,7 @@ intptr_t yalisp_rt_make_vector(uint64_t sz, intptr_t* data) {
 
 intptr_t yalisp_rt_make_str(char* s) {
   object_t* str_obj = rt_alloc_object();
-  *str_obj = (object_t){.kind = OBJ_STR, .rc = 0, .value.as_cstr = s};
+  *str_obj = (object_t){.kind = OBJ_STR, .rc = 1, .value.as_cstr = s};
 
   return tag_ptr((uint64_t*)str_obj);
 }
@@ -132,21 +142,23 @@ intptr_t yalisp_rt_make_lambda(lambda_impl_ptr_t lp, intptr_t env) {
 
   *lambda_obj =
       (object_t){.kind = OBJ_LAMBDA,
-                 .rc = 0,
+                 .rc = 1,
                  .value.as_lambda = {.lambda_impl = lp, .env_vector_ptr = env}};
   return tag_ptr((uint64_t*)lambda_obj);
 }
 
 intptr_t yalisp_rt_call(intptr_t fn, intptr_t args_vec) {
-  yalisp_rt_rc_incr(args_vec);
-
   object_t* fn_obj = (object_t*)detag_ptr(fn);
   if (fn_obj->kind != OBJ_LAMBDA)
-    yalisp_rt_panic("Trying to apply non-lambda object");
+    rt_panic("Trying to apply non-lambda object");
 
   lambda_impl_ptr_t fn_impl = fn_obj->value.as_lambda.lambda_impl;
 
   return fn_impl(fn_obj->value.as_lambda.env_vector_ptr, args_vec);
+}
+
+uint64_t yalisp_rt_vector_length(intptr_t vec) {
+  return ((object_t*)detag_ptr(vec))->value.as_vector.sz;
 }
 
 intptr_t yalisp_rt_vector_get(intptr_t vec, uint64_t i) {
@@ -158,7 +170,7 @@ intptr_t print_impl(intptr_t __attribute__((unused)) env_vec,
                     intptr_t args_vec) {
   object_t* args_obj = (object_t*)detag_ptr(args_vec);
   if (args_obj->value.as_vector.sz != 1)
-    yalisp_rt_panic("print must be applied to 1 argument");
+    rt_panic("print must be applied to 1 argument");
 
   intptr_t arg = args_obj->value.as_vector.data[0];
 
@@ -195,7 +207,7 @@ intptr_t vector_ref_impl(intptr_t __attribute__((unused)) env_vec,
                          intptr_t args_vec) {
   object_t* args_obj = (object_t*)detag_ptr(args_vec);
   if (args_obj->value.as_vector.sz != 2)
-    yalisp_rt_panic("vector-ref must be applied to 2 arguments");
+    rt_panic("vector-ref must be applied to 2 arguments");
 
   intptr_t vec = args_obj->value.as_vector.data[0];
   intptr_t pos = args_obj->value.as_vector.data[1];
@@ -205,15 +217,18 @@ intptr_t vector_ref_impl(intptr_t __attribute__((unused)) env_vec,
 
   object_t* vec_obj = (object_t*)detag_ptr(vec);
   if (vec_obj->kind != OBJ_VEC)
-    yalisp_rt_panic("vector-ref applied to non-vec object");
+    rt_panic("vector-ref applied to non-vec object");
 
   int64_t i = (int64_t)detag(pos);
   int64_t vec_sz = vec_obj->value.as_vector.sz;
 
   if (i < 0 || i >= vec_sz)
-    yalisp_rt_panic("vector-ref out of bounds");
+    rt_panic("vector-ref out of bounds");
 
-  return vec_obj->value.as_vector.data[i];
+  intptr_t res = vec_obj->value.as_vector.data[i];
+  yalisp_rt_rc_incr(res);
+
+  return res;
 }
 
 object_t vector_ref_lambda = {
@@ -225,7 +240,7 @@ intptr_t print_string_impl(intptr_t __attribute__((unused)) env_vec,
                            intptr_t args_vec) {
   object_t* args_obj = (object_t*)detag_ptr(args_vec);
   if (args_obj->value.as_vector.sz != 1)
-    yalisp_rt_panic("print-string must be applied to 1 argument");
+    rt_panic("print-string must be applied to 1 argument");
 
   intptr_t arg = args_obj->value.as_vector.data[0];
 
@@ -234,7 +249,7 @@ intptr_t print_string_impl(intptr_t __attribute__((unused)) env_vec,
   object_t* arg_obj = (object_t*)detag_ptr(arg);
 
   if (arg_obj->kind != OBJ_STR)
-    yalisp_rt_panic("print-string applied to non-string argument");
+    rt_panic("print-string applied to non-string argument");
 
   printf("%s\n", arg_obj->value.as_cstr);
 
@@ -246,14 +261,39 @@ object_t print_string_lambda = {
     .rc = -1,
     .value.as_lambda = {.lambda_impl = print_string_impl, .env_vector_ptr = 0}};
 
+intptr_t noreturn panic_impl(intptr_t __attribute__((unused)) env_vec,
+                             intptr_t args_vec) {
+  object_t* args_obj = (object_t*)detag_ptr(args_vec);
+  if (args_obj->value.as_vector.sz != 1)
+    rt_panic("panic must be called with 1 argument");
+
+  intptr_t arg = args_obj->value.as_vector.data[0];
+
+  yalisp_rt_typcheck(arg, type_ptr);
+
+  object_t* arg_obj = (object_t*)detag_ptr(arg);
+
+  if (arg_obj->kind != OBJ_STR)
+    rt_panic("panic must be called with string argument");
+
+  rt_panic(arg_obj->value.as_cstr);
+}
+
+object_t panic_lambda = {
+    .kind = OBJ_LAMBDA,
+    .rc = -1,
+    .value.as_lambda = {.lambda_impl = panic_impl, .env_vector_ptr = 0}};
+
 intptr_t print;
 intptr_t read_int;
 intptr_t vector_ref;
 intptr_t vector_length;
 intptr_t print_string;
+intptr_t panic;
 
 void yalisp_rt_init() {
   print = (intptr_t)(&print_lambda) | type_ptr;
   vector_ref = (intptr_t)(&vector_ref_lambda) | type_ptr;
   print_string = (intptr_t)(&print_string_lambda) | type_ptr;
+  panic = (intptr_t)(&panic_lambda) | type_ptr;
 }
