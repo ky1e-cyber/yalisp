@@ -137,7 +137,6 @@ intptr_t yalisp_rt_make_str(char* s) {
 }
 
 intptr_t yalisp_rt_make_lambda(lambda_impl_ptr_t lp, intptr_t env) {
-  yalisp_rt_rc_incr(env);
   object_t* lambda_obj = rt_alloc_object();
 
   *lambda_obj =
