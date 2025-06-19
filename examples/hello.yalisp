@@ -1,7 +1,7 @@
-(let
-  [hello "Hello, World!"]
+(let [hello "Hello, World!"]
   (let
     [f (lambda [g] (g hello))]
     (f print-string)))
 
-0
+(print-char 10)
+

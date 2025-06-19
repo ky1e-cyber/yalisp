@@ -10,7 +10,7 @@ static type_t get_type(intptr_t p) {
   return (type_t)(p & 0b111);
 }
 
-static intptr_t detag(intptr_t p) {
+static intptr_t detag_value(intptr_t p) {
   return p >> 3;
 }
 
@@ -18,8 +18,12 @@ static uint64_t* detag_ptr(intptr_t p) {
   return (uint64_t*)(p ^ 1);
 }
 
+static intptr_t tag_value(uint64_t p, type_t t) {
+  return (intptr_t)(p << 3) | t;
+}
+
 static intptr_t tag_ptr(uint64_t* ptr) {
-  return (intptr_t)ptr | 1;
+  return (intptr_t)ptr | type_ptr;
 }
 
 static char* tymismatch_s = "Type error";
@@ -175,19 +179,19 @@ intptr_t print_impl(intptr_t __attribute__((unused)) env_vec,
 
   switch (get_type(arg)) {
     case type_int: {
-      printf("%li\n", detag(arg));
+      printf("%li", detag_value(arg));
       break;
     }
     case type_bool: {
-      printf("%s\n", detag(arg) ? "#t" : "#f");
+      printf("%s", detag_value(arg) ? "#t" : "#f");
       break;
     }
     case type_void: {
-      printf("#void\n");
+      printf("#void");
       break;
     }
     case type_ptr: {
-      printf("%p\n", (void*)detag_ptr(arg));
+      printf("%p", (void*)detag_ptr(arg));
       break;
     }
     default:
@@ -201,6 +205,20 @@ object_t print_lambda = {
     .kind = OBJ_LAMBDA,
     .rc = -1,
     .value.as_lambda = {.lambda_impl = print_impl, .env_vector_ptr = 0}};
+
+intptr_t println_impl(intptr_t __attribute__((unused)) env_vec,
+                      intptr_t args_vec) {
+  print_impl(env_vec, args_vec);
+
+  printf("\n");
+
+  return (intptr_t)type_void;
+}
+
+object_t println_lambda = {
+    .kind = OBJ_LAMBDA,
+    .rc = -1,
+    .value.as_lambda = {.lambda_impl = println_impl, .env_vector_ptr = 0}};
 
 intptr_t vector_ref_impl(intptr_t __attribute__((unused)) env_vec,
                          intptr_t args_vec) {
@@ -218,7 +236,7 @@ intptr_t vector_ref_impl(intptr_t __attribute__((unused)) env_vec,
   if (vec_obj->kind != OBJ_VEC)
     rt_panic("vector-ref applied to non-vec object");
 
-  int64_t i = (int64_t)detag(pos);
+  int64_t i = (int64_t)detag_value(pos);
   int64_t vec_sz = vec_obj->value.as_vector.sz;
 
   if (i < 0 || i >= vec_sz)
@@ -235,6 +253,31 @@ object_t vector_ref_lambda = {
     .rc = -1,
     .value.as_lambda = {.lambda_impl = vector_ref_impl, .env_vector_ptr = 0}};
 
+intptr_t vector_length_impl(intptr_t __attribute__((unused)) env_vec,
+                            intptr_t args_vec) {
+  object_t* args_obj = (object_t*)detag_ptr(args_vec);
+  if (args_obj->value.as_vector.sz != 1)
+    rt_panic("vector-length must be applied to 1 argument");
+
+  intptr_t vec = args_obj->value.as_vector.data[0];
+
+  yalisp_rt_typcheck(vec, type_ptr);
+
+  object_t* vec_obj = (object_t*)detag_ptr(vec);
+  if (vec_obj->kind != OBJ_VEC)
+    rt_panic("vector-length applied to non-vec object");
+
+  int64_t vec_sz = vec_obj->value.as_vector.sz;
+
+  return tag_value(vec_sz, type_int);
+}
+
+object_t vector_length_lambda = {
+    .kind = OBJ_LAMBDA,
+    .rc = -1,
+    .value.as_lambda = {.lambda_impl = vector_length_impl,
+                        .env_vector_ptr = 0}};
+
 intptr_t print_string_impl(intptr_t __attribute__((unused)) env_vec,
                            intptr_t args_vec) {
   object_t* args_obj = (object_t*)detag_ptr(args_vec);
@@ -250,7 +293,7 @@ intptr_t print_string_impl(intptr_t __attribute__((unused)) env_vec,
   if (arg_obj->kind != OBJ_STR)
     rt_panic("print-string applied to non-string argument");
 
-  printf("%s\n", arg_obj->value.as_cstr);
+  printf("%s", arg_obj->value.as_cstr);
 
   return (intptr_t)type_void;
 }
@@ -259,6 +302,48 @@ object_t print_string_lambda = {
     .kind = OBJ_LAMBDA,
     .rc = -1,
     .value.as_lambda = {.lambda_impl = print_string_impl, .env_vector_ptr = 0}};
+
+intptr_t print_char_impl(intptr_t __attribute__((unused)) env_vec,
+                         intptr_t args_vec) {
+  object_t* args_obj = (object_t*)detag_ptr(args_vec);
+  if (args_obj->value.as_vector.sz != 1)
+    rt_panic("print-char must be applied to 1 argument");
+
+  intptr_t arg = args_obj->value.as_vector.data[0];
+
+  yalisp_rt_typcheck(arg, type_int);
+
+  intptr_t c = detag_value(arg);
+
+  if (!(c >= 0 && c <= 255))
+    rt_panic("print-char applied to int not in char range");
+
+  putc(c, stdout);
+
+  return (intptr_t)type_void;
+}
+
+object_t print_char_lambda = {
+    .kind = OBJ_LAMBDA,
+    .rc = -1,
+    .value.as_lambda = {.lambda_impl = print_char_impl, .env_vector_ptr = 0}};
+
+intptr_t read_int_impl(intptr_t __attribute__((unused)) env_vec,
+                       intptr_t args_vec) {
+  object_t* args_obj = (object_t*)detag_ptr(args_vec);
+  if (args_obj->value.as_vector.sz != 0)
+    rt_panic("read-int must be applied to no argument");
+
+  int64_t n;
+  scanf("%lli", &n);
+
+  return tag_value(n, type_int);
+}
+
+object_t read_int_lambda = {
+    .kind = OBJ_LAMBDA,
+    .rc = -1,
+    .value.as_lambda = {.lambda_impl = read_int_impl, .env_vector_ptr = 0}};
 
 intptr_t noreturn panic_impl(intptr_t __attribute__((unused)) env_vec,
                              intptr_t args_vec) {
@@ -284,6 +369,8 @@ object_t panic_lambda = {
     .value.as_lambda = {.lambda_impl = panic_impl, .env_vector_ptr = 0}};
 
 intptr_t print;
+intptr_t println;
+intptr_t print_char;
 intptr_t read_int;
 intptr_t vector_ref;
 intptr_t vector_length;
@@ -292,7 +379,11 @@ intptr_t panic;
 
 void yalisp_rt_init() {
   print = (intptr_t)(&print_lambda) | type_ptr;
-  vector_ref = (intptr_t)(&vector_ref_lambda) | type_ptr;
+  println = (intptr_t)(&println_lambda) | type_ptr;
+  print_char = (intptr_t)(&print_char_lambda) | type_ptr;
   print_string = (intptr_t)(&print_string_lambda) | type_ptr;
+  vector_ref = (intptr_t)(&vector_ref_lambda) | type_ptr;
+  vector_length = (intptr_t)(&vector_length_lambda) | type_ptr;
+  read_int = (intptr_t)(&read_int_lambda) | type_ptr;
   panic = (intptr_t)(&panic_lambda) | type_ptr;
 }

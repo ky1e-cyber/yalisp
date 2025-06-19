@@ -6,4 +6,4 @@
                 (+ [vector-ref v 1] 1)
                 (+ [vector-ref v 2] 1))]
           (f0 f0 v1 (- i 1)))))]
-  (print (f f (vector 0 42 69) 50)))
+  (println (f f (vector 0 42 69) 50)))

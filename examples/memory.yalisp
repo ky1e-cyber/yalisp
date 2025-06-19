@@ -11,3 +11,5 @@
         (print (vector-ref (vector-ref vec1 1) 1))
         (vector-ref (vector-ref vec1 2) 1))]
     (print-string (vector-ref vec2 2))))
+
+(print-char 10)
